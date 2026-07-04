@@ -216,3 +216,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Scraping pipeline artifacts
+backend/pipeline/staging/
