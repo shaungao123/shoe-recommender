@@ -142,6 +142,23 @@ def test_resolve_distinguishes_versions():
     assert not report.ambiguous  # different versions are not near-misses
 
 
+def test_resolve_numbers_are_versioning_even_mid_name():
+    # non-trailing numbers still distinguish shoes — never flagged as ambiguous
+    r1 = make_record(brand="Nike", model="Kobe 4 Protro", model_raw="Nike Kobe 4 Protro")
+    r2 = make_record(brand="Nike", model="Kobe 8 Protro", model_raw="Nike Kobe 8 Protro")
+    report = resolve([r1, r2])
+    assert len(report.canonical) == 2
+    assert not report.ambiguous
+
+
+def test_resolve_unnumbered_vs_numbered_are_different_shoes():
+    r1 = make_record(brand="Puma", model="All Pro Nitro", model_raw="Puma All Pro Nitro")
+    r2 = make_record(brand="Puma", model="All Pro Nitro 2", model_raw="PUMA All Pro Nitro 2")
+    report = resolve([r1, r2])
+    assert len(report.canonical) == 2
+    assert not report.ambiguous
+
+
 def test_resolve_flags_near_miss_keys_instead_of_guessing():
     r1 = make_record(brand="Nike", model="Sabrina 2", model_raw="Nike Sabrina 2")
     r2 = make_record(brand="Nike", model="Sabrina II EP", model_raw="Sabrina II EP")

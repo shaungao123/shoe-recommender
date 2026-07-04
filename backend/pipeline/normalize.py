@@ -296,6 +296,16 @@ def extract_version(model: str) -> str | None:
     return None
 
 
+def numeric_signature(key: str) -> tuple[str, ...]:
+    """All numeric tokens of a model key, in order.
+
+    Numbers are versioning: keys whose signatures differ are different
+    shoes, full stop — 'kobe 4 protro' vs 'kobe 8 protro', and
+    'all pro nitro' vs 'all pro nitro 2' (absent != present).
+    """
+    return tuple(t for t in key.split() if re.fullmatch(r"\d+(?:\.\d+)?", t))
+
+
 # ---------------------------------------------------------------------------
 # Entity resolution
 # ---------------------------------------------------------------------------
@@ -417,11 +427,11 @@ def resolve(records: list[SourceRecord]) -> ResolutionReport:
     for brand, keys in keys_by_brand.items():
         for i, a in enumerate(keys):
             for b in keys[i + 1:]:
-                ratio = difflib.SequenceMatcher(None, a, b).ratio()
-                # different trailing version numbers are genuinely different shoes
-                va, vb = extract_version(a), extract_version(b)
-                if va and vb and va != vb:
+                # numbers are versioning: any numeric difference (including
+                # unnumbered vs numbered) means genuinely different shoes
+                if numeric_signature(a) != numeric_signature(b):
                     continue
+                ratio = difflib.SequenceMatcher(None, a, b).ratio()
                 if ratio >= FUZZY_REVIEW_THRESHOLD:
                     flagged_pairs.add((brand, a, b))
 
