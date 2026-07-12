@@ -3,6 +3,7 @@ uvicorn[standard]>=0.32.0
 sqlalchemy>=2.0.36
 pydantic-settings>=2.6.0
 psycopg[binary]>=3.2.0
+pgvector>=0.3.0
 alembic>=1.14.0
 httpx>=0.28.0
 beautifulsoup4>=4.12.0

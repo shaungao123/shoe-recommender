@@ -14,6 +14,11 @@ class Shoe(Base):
     __tablename__ = "shoes"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    # Pipeline slug (brand-model-version); nullable so pre-pipeline rows survive
+    # the migration — the upsert writer deletes rows without one.
+    canonical_id: Mapped[str | None] = mapped_column(
+        String(256), unique=True, index=True, nullable=True
+    )
     brand: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
     price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)

@@ -1,5 +1,6 @@
 """Shared settings — DB URL, embedding model id, etc."""
 
+from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -8,6 +9,14 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./shoe_recommender.db"
     embedding_model_id: str = "text-embedding-3-small"
+
+    @field_validator("database_url")
+    @classmethod
+    def _use_psycopg3(cls, url: str) -> str:
+        # bare postgresql:// selects psycopg2; this project ships psycopg 3
+        if url.startswith("postgresql://"):
+            return url.replace("postgresql://", "postgresql+psycopg://", 1)
+        return url
 
 
 settings = Settings()

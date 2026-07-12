@@ -3,9 +3,11 @@
 Scrapes complementary sources, normalizes each into a common record shape,
 and resolves records across sources into **one canonical shoe per model**
 with per-field provenance. Output is a JSON staging corpus for the RAG
-engine to embed later — this pipeline never writes to the production
+engine to embed later — the scrape run never writes to the production
 `shoes` table, never generates embeddings, and never fetches live prices
 (`affiliate_url` stays null until the affiliate-feed step exists).
+Writing the corpus to Postgres is a separate, explicit command (see
+"Upsert to Postgres" below).
 
 Scrapers are offline/scheduled tools — never run them in the request path.
 
@@ -40,6 +42,26 @@ per-field fill rates) and writes to `pipeline/staging/`:
 - `canonical.json` — merged shoes with `provenance` per field and `sources`
 - `unmatched.json` / `ambiguous.json` — records needing a human decision;
   ambiguous = near-identical model keys that were deliberately **not** merged
+
+## Upsert to Postgres
+
+Once the staging corpus looks right, push it to the `shoes` table (from
+`backend/`, with migrations applied via `make migrate` and the Postgres
+`DATABASE_URL` in `.env` — the writer refuses the SQLite fallback):
+
+```bash
+python -m pipeline.upsert.writer             # write staging/canonical.json
+python -m pipeline.upsert.writer --dry-run   # report counts, roll back
+python -m pipeline.upsert.writer --staging path/to/other.json
+```
+
+The writer makes the table match the batch: upserts by `canonical_id`
+(idempotent — re-runs update in place, shoe ids stay stable), then deletes
+rows not in the batch, including rows without a `canonical_id` (pre-pipeline
+mock data). Structured spec fields go to the `specs` JSON column; per-source
+`metrics` (never averaged), pros/cons/review text, provenance, and sources go
+to `extra_metadata`. `affiliate_url` is always written as null. Embedding
+vectors are a separate later step (`pipeline/embed/`).
 
 ## Refresh behaviour
 

@@ -219,3 +219,6 @@ __marimo__/
 
 # Scraping pipeline artifacts
 backend/pipeline/staging/
+
+# Claude Code personal notes (per-dev, never committed)
+CLAUDE.local.md
