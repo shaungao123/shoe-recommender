@@ -23,6 +23,7 @@ from urllib.parse import urlsplit
 import httpx
 
 from pipeline.schema import SourceRecord
+from shared.http import RETRYABLE_STATUSES, retry_delay
 
 log = logging.getLogger(__name__)
 
@@ -34,10 +35,10 @@ USER_AGENT = (
 CACHE_DIR = Path(__file__).resolve().parent.parent / ".cache"
 
 # Politeness knobs — concurrency is 1 by construction (sync client).
+# What counts as retryable (and Retry-After handling) comes from shared/http.py.
 MIN_DELAY_SECONDS = 3.0
 MAX_RETRIES = 4
 BACKOFF_BASE_SECONDS = 5.0
-RETRYABLE_STATUSES = {429, 500, 502, 503, 504}
 
 
 @dataclass
@@ -161,12 +162,7 @@ class Fetcher:
                 continue
 
             if resp.status_code in RETRYABLE_STATUSES:
-                retry_after = resp.headers.get("Retry-After")
-                delay = (
-                    float(retry_after)
-                    if retry_after and retry_after.isdigit()
-                    else BACKOFF_BASE_SECONDS * 2**attempt
-                )
+                delay = retry_delay(resp, attempt, BACKOFF_BASE_SECONDS)
                 log.warning(
                     "%s from %s — backing off %.0fs", resp.status_code, url, delay
                 )
