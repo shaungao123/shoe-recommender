@@ -22,6 +22,10 @@ from pipeline.schema import (
     SourceRecord,
 )
 
+# Tag vocabulary lives in shared/tags.py (the retriever's fallback ranking
+# uses the same maps at query time); re-exported here for the scrapers.
+from shared.tags import map_playstyles, map_positions  # noqa: F401
+
 # ---------------------------------------------------------------------------
 # Unit / money parsing
 # ---------------------------------------------------------------------------
@@ -110,59 +114,6 @@ def map_outdoor(text: str) -> str | None:
     return None
 
 
-_POSITION_MAP = {
-    "pg": "guard",
-    "sg": "guard",
-    "guard": "guard",
-    "point guard": "guard",
-    "shooting guard": "guard",
-    "sf": "wing",
-    "wing": "wing",
-    "small forward": "wing",
-    "forward": "wing",
-    "pf": "big",
-    "c": "big",
-    "big": "big",
-    "center": "big",
-    "power forward": "big",
-    "big man": "big",
-}
-
-
-def map_positions(text: str) -> list[str]:
-    tags: list[str] = []
-    for token in re.split(r"[/,;+&]| and ", text.lower()):
-        tag = _POSITION_MAP.get(token.strip())
-        if tag and tag not in tags:
-            tags.append(tag)
-    return tags
-
-
-_PLAYSTYLE_MAP = {
-    "slasher": "slasher",
-    "shooter": "shooter",
-    "all-around": "all-around",
-    "all around": "all-around",
-    "allround": "all-around",
-    "versatile": "all-around",
-    "post": "post",
-    "post player": "post",
-    "post scorer": "post",
-    "defender": "defender",
-    "lockdown defender": "defender",
-    "speedster": "speedster",
-    "quick guard": "speedster",
-    "shifty": "speedster",
-}
-
-
-def map_playstyles(text: str) -> list[str]:
-    tags: list[str] = []
-    for token in re.split(r"[/,;+&]| and ", text.lower()):
-        tag = _PLAYSTYLE_MAP.get(token.strip())
-        if tag and tag not in tags:
-            tags.append(tag)
-    return tags
 
 
 # ---------------------------------------------------------------------------

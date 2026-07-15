@@ -9,6 +9,8 @@ class Settings(BaseSettings):
 
     database_url: str = "sqlite:///./shoe_recommender.db"
     embedding_model_id: str = "text-embedding-3-small"
+    # OpenAI key for the embeddings API (index time and query time).
+    openai_api_key: str = ""
 
     @field_validator("database_url")
     @classmethod
