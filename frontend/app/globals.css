@@ -1,0 +1,38 @@
+@import "tailwindcss";
+
+@theme {
+  --color-paper: #f4f3ef;
+  --color-ink: #181614;
+  --color-accent: #ff5a1f;
+  --color-accent-deep: #e04d15;
+  --color-line: #e7e5e0;
+  --color-muted: #5c5850;
+  --color-faint: #a9a49a;
+  --color-fainter: #c7c3b8;
+  --color-body: #33302b;
+
+  --font-sans: var(--font-inter), system-ui, sans-serif;
+  --font-serif: var(--font-source-serif), Georgia, serif;
+}
+
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+input::placeholder {
+  color: var(--color-faint);
+}
+
+/* Diagonal-hatch placeholder used where a shoe photo would go */
+.hatch {
+  background-color: #f4f3ef;
+  background-image: repeating-linear-gradient(
+    45deg,
+    rgba(0, 0, 0, 0.045),
+    rgba(0, 0, 0, 0.045) 6px,
+    rgba(0, 0, 0, 0.015) 6px,
+    rgba(0, 0, 0, 0.015) 12px
+  );
+}
