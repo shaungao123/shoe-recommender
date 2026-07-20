@@ -1,12 +1,16 @@
 """Embedding client tests — httpx MockTransport, no network."""
 
+from collections.abc import Callable
+
 import httpx
 import pytest
 
 from shared.embedding.client import MAX_BATCH_SIZE, EmbeddingClient, EmbeddingError
 
 
-def make_client(handler: httpx.MockTransport | callable) -> EmbeddingClient:
+def make_client(
+    handler: httpx.MockTransport | Callable[[httpx.Request], httpx.Response],
+) -> EmbeddingClient:
     transport = handler if isinstance(handler, httpx.MockTransport) else httpx.MockTransport(handler)
     return EmbeddingClient(
         model_id="test-model",
