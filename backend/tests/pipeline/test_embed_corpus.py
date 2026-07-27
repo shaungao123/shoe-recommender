@@ -57,6 +57,12 @@ def make_shoe(**overrides) -> Shoe:
     return Shoe(**values)
 
 
+def test_spec_summary_omits_price_when_null() -> None:
+    summary = build_spec_summary(make_shoe(price=None))
+    assert "price:" not in summary
+    assert summary.endswith(".")
+
+
 def test_spec_summary_reads_like_prose() -> None:
     summary = build_spec_summary(make_shoe())
     assert "Nike LeBron 21" in summary

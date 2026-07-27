@@ -129,22 +129,34 @@ def search_candidates(
     session: Session,
     query_vector: list[float],
     model_id: str,
-    max_price: float | None = None,
+    *,
+    brand: str | None = None,
+    budget_min: float | None = None,
+    budget_max: float | None = None,
+    outdoor: str | None = None,
+    playstyle: str | None = None,
+    cut: str | None = None,
+    width: str | None = None,
+    position: str | None = None,
     limit: int = 10,
     snippets_per_shoe: int = 3,
 ) -> list[ShoeMatch]:
-    """Budget-filtered pgvector search; shoes ranked by their best chunk."""
+    """Hard-filtered pgvector search; shoes ranked by their best chunk."""
     distance = Embedding.vector.cosine_distance(query_vector).label("distance")
 
-    chunk_query = (
+    chunk_query = _apply_filters(
         select(Embedding.shoe_id, Embedding.content, Embedding.source, distance)
         .join(Shoe, Shoe.id == Embedding.shoe_id)
-        .where(Embedding.model_id == model_id)
-        .order_by(distance)
-        .limit(limit * snippets_per_shoe * OVERFETCH_FACTOR)
-    )
-    if max_price is not None:
-        chunk_query = chunk_query.where(Shoe.price <= max_price)
+        .where(Embedding.model_id == model_id),
+        brand=brand,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        outdoor=outdoor,
+        playstyle=playstyle,
+        cut=cut,
+        width=width,
+        position=position,
+    ).order_by(distance).limit(limit * snippets_per_shoe * OVERFETCH_FACTOR)
 
     hits_by_shoe: dict[int, list[ChunkHit]] = {}
     for row in session.execute(chunk_query):  # ordered best-first
@@ -171,17 +183,42 @@ def search_candidates(
     ]
 
 
-def list_shoes_within_budget(
-    session: Session, max_price: float | None = None, limit: int | None = None
+def list_filtered_shoes(
+    session: Session,
+    *,
+    brand: str | None = None,
+    budget_min: float | None = None,
+    budget_max: float | None = None,
+    outdoor: str | None = None,
+    playstyle: str | None = None,
+    cut: str | None = None,
+    width: str | None = None,
+    position: str | None = None,
+    limit: int | None = None,
 ) -> list[Shoe]:
-    """No-vector fallback pool: budget filter only, priciest first.
+    """No-vector fallback pool: hard filters, priciest first.
 
     The retriever re-ranks this in Python (playstyle tag overlap); the corpus
-    is small enough that pulling every in-budget row is fine.
+    is small enough that pulling every matching row is fine.
     """
-    query = select(Shoe).order_by(Shoe.price.desc(), Shoe.id)
-    if max_price is not None:
-        query = query.where(Shoe.price <= max_price)
+    query = _apply_filters(
+        select(Shoe),
+        brand=brand,
+        budget_min=budget_min,
+        budget_max=budget_max,
+        outdoor=outdoor,
+        playstyle=playstyle,
+        cut=cut,
+        width=width,
+        position=position,
+    ).order_by(Shoe.price.desc(), Shoe.id)
     if limit is not None:
         query = query.limit(limit)
     return list(session.scalars(query))
+
+
+def list_shoes_within_budget(
+    session: Session, max_price: float | None = None, limit: int | None = None
+) -> list[Shoe]:
+    """Backward-compatible alias: budget-only pool, priciest first."""
+    return list_filtered_shoes(session, budget_max=max_price, limit=limit)

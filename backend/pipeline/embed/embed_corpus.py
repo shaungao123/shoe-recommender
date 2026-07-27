@@ -70,7 +70,8 @@ def build_spec_summary(shoe: Shoe) -> str:
         parts.append("positions: " + ", ".join(specs["position_tags"]))
     if specs.get("playstyle_tags"):
         parts.append("playstyles: " + ", ".join(specs["playstyle_tags"]))
-    parts.append(f"price: ${shoe.price:.0f}")
+    if shoe.price is not None:
+        parts.append(f"price: ${float(shoe.price):.0f}")
     return ". ".join(parts) + "."
 
 

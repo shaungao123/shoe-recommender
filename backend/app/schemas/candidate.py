@@ -47,3 +47,5 @@ class Candidate(BaseModel):
     # (higher = better). None when the candidate came from the no-vector
     # fallback path — a real-but-terrible vector match is 0.0, not None.
     similarity: float | None = None
+    # Fallback-only: tag overlap count for primary rank before random tie-break.
+    tag_overlap: int | None = None
