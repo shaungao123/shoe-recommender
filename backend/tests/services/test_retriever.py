@@ -11,6 +11,7 @@ import pytest
 from app.db.repositories.shoes import ChunkHit, ShoeMatch
 from app.services.rag import retriever
 from shared.db.models import Shoe
+from shared.embedding import EmbeddingError
 
 
 def make_shoe(name: str, price: str, playstyle_tags: list[str] | None = None, **overrides) -> Shoe:
@@ -36,6 +37,13 @@ def test_build_query_text_includes_both_inputs() -> None:
 def test_build_query_text_skips_empty_aesthetic() -> None:
     text = retriever.build_query_text("shooter", "  ")
     assert "Style" not in text
+    assert "shooter" in text
+
+
+def test_build_query_text_aesthetic_only() -> None:
+    text = retriever.build_query_text("", "clean white minimal")
+    assert "clean white minimal" in text
+    assert "player" not in text
 
 
 def test_fallback_filters_budget_and_ranks_by_tag_overlap(db_session) -> None:
@@ -56,6 +64,64 @@ def test_fallback_filters_budget_and_ranks_by_tag_overlap(db_session) -> None:
     assert "Pricey" not in names  # over budget
     assert names[0] == "Match"  # 2 tag hits beats 0
     assert all(c.similarity is None for c in candidates)  # no-vector marker
+
+
+def test_fallback_null_budget_includes_all_prices(db_session) -> None:
+    db_session.add_all(
+        [
+            make_shoe("Pricey", "220", ["slasher"]),
+            make_shoe("Cheap", "90", ["slasher"]),
+        ]
+    )
+    db_session.flush()
+
+    names = [
+        c.name
+        for c in retriever.retrieve_fallback(
+            db_session, playstyle="slasher", budget=None
+        )
+    ]
+    assert "Pricey" in names
+    assert "Cheap" in names
+
+
+def test_fallback_respects_hard_filters(db_session) -> None:
+    db_session.add_all(
+        [
+            make_shoe(
+                "Outdoor",
+                "150",
+                ["slasher"],
+                specs={
+                    "playstyle_tags": ["slasher"],
+                    "position_tags": ["guard"],
+                    "outdoor_suitability": "good",
+                    "cut_height": "low",
+                },
+            ),
+            make_shoe(
+                "Indoor",
+                "140",
+                ["slasher"],
+                specs={
+                    "playstyle_tags": ["slasher"],
+                    "position_tags": ["guard"],
+                    "outdoor_suitability": "bad",
+                    "cut_height": "low",
+                },
+            ),
+        ]
+    )
+    db_session.flush()
+
+    candidates = retriever.retrieve_fallback(
+        db_session,
+        playstyle="slasher",
+        budget=200,
+        outdoor="good",
+        cut="low",
+    )
+    assert [c.name for c in candidates] == ["Outdoor"]
 
 
 def test_fallback_tag_matching_uses_word_boundaries_and_synonyms(db_session) -> None:
@@ -94,9 +160,14 @@ def test_retrieve_wires_budget_model_and_maps_candidates(db_session, monkeypatch
 
     captured: dict = {}
 
-    def fake_search(session, query_vector, model_id, max_price, limit, snippets_per_shoe):
+    def fake_search(session, query_vector, model_id, limit, snippets_per_shoe, **filters):
         captured.update(
-            vector=query_vector, model_id=model_id, max_price=max_price, limit=limit
+            vector=query_vector,
+            model_id=model_id,
+            budget_max=filters.get("budget_max"),
+            brand=filters.get("brand"),
+            outdoor=filters.get("outdoor"),
+            limit=limit,
         )
         return [
             ShoeMatch(
@@ -110,10 +181,18 @@ def test_retrieve_wires_budget_model_and_maps_candidates(db_session, monkeypatch
     client = FakeClient()
 
     candidates = retriever.retrieve(
-        db_session, playstyle="post scorer", budget=180, aesthetic="retro", client=client
+        db_session,
+        playstyle="post scorer",
+        budget=180,
+        aesthetic="retro",
+        client=client,
+        brand="Nike",
+        outdoor="fair",
     )
 
-    assert captured["max_price"] == 180
+    assert captured["budget_max"] == 180
+    assert captured["brand"] == "Nike"
+    assert captured["outdoor"] == "fair"
     assert captured["model_id"] == "test-model"
     assert captured["vector"] == [0.1, 0.2]
 
@@ -125,3 +204,20 @@ def test_retrieve_wires_budget_model_and_maps_candidates(db_session, monkeypatch
     assert candidate.similarity == pytest.approx(0.75)
     assert candidate.snippets[0].text == "Great traction."
     assert candidate.snippets[0].source == "weartesters"
+
+
+def test_retrieve_raises_embedding_error(db_session, monkeypatch: pytest.MonkeyPatch) -> None:
+    class BoomClient:
+        model_id = "test-model"
+
+        def embed_one(self, text: str) -> list[float]:
+            raise EmbeddingError("quota")
+
+    with pytest.raises(EmbeddingError, match="quota"):
+        retriever.retrieve(
+            db_session,
+            playstyle="guard",
+            budget=150,
+            aesthetic="",
+            client=BoomClient(),
+        )
