@@ -59,6 +59,6 @@ def recommend(
 
     top = select_top_candidates(candidates, n=TOP_N, seed=request_seed(request))
     recommendations: list[RecommendedShoe] = explainer.explain(
-        top, playstyle=playstyle
+        top, playstyle=playstyle, aesthetic=aesthetic
     )
     return RecommendResponse(recommendations=recommendations)
