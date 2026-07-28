@@ -6,7 +6,18 @@ import pytest
 
 from app.schemas.candidate import Candidate, ReviewSnippet
 from shared.embedding import EmbeddingError
+from shared.llm import LLMError
 from tests.conftest import seed_shoe
+
+
+@pytest.fixture(autouse=True)
+def _force_template_explainer(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Skip live chat API; public explain() falls back to the template path."""
+
+    def boom(*args, **kwargs):
+        raise LLMError("tests use template explainer")
+
+    monkeypatch.setattr("app.services.rag.explainer_llm.explain", boom)
 
 
 def test_recommend_empty_corpus_returns_empty_list(client, monkeypatch: pytest.MonkeyPatch):
