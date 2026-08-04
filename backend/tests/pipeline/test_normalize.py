@@ -7,6 +7,7 @@ from pipeline.normalize import (
     map_positions,
     map_width_fit,
     model_key,
+    numeric_signature,
     parse_mm,
     parse_usd_cents,
     parse_weight_oz,
@@ -102,6 +103,63 @@ def test_model_key_folds_aliases():
     assert model_key("Jordan", "Air Jordan XXXVIII") == model_key("Jordan", "Jordan 38")
     # review-title noise words
     assert model_key("Nike", "KD 19 Performance Review") == model_key("Nike", "KD 19")
+
+
+def test_model_key_splits_dotted_version_from_word():
+    # 'Zero.1'/'Zero.4' fuse into one token if the period is just dropped —
+    # that hides the version number from numeric_signature. A period before
+    # a digit must become a token boundary, not vanish.
+    assert model_key("Jordan", "Why Not Zero.1") == "why not zero 1"
+    # alternate spelling with a numeral zero for the letter O also splits,
+    # and folds ('zer0' -> 'zero') to the same key as the standard spelling
+    assert model_key("Jordan", "Why Not Zer0.4") == model_key("Jordan", "Why Not Zero.4")
+    # acronym punctuation between letters is untouched
+    assert model_key("Nike", "G.T. Cut 3") == "gt cut 3"
+
+
+def test_model_key_folds_v_letter_tokens_to_plain_digits():
+    # 'V2' is styling, not a distinct word — fold it so numeric_signature()
+    # (which only looks for plain digit tokens) sees the version number.
+    assert model_key(None, "Fresh Foam BB V2") == "fresh foam bb 2"
+    assert numeric_signature(model_key(None, "Fresh Foam BB")) != numeric_signature(
+        model_key(None, "Fresh Foam BB V2")
+    )
+    assert numeric_signature(model_key(None, "TWO WXY V2")) != numeric_signature(
+        model_key(None, "TWO WXY V3")
+    )
+
+
+def test_resolve_v_suffix_versions_are_not_flagged_ambiguous():
+    r1 = make_record(brand="New Balance", model="Fresh Foam BB", model_raw="New Balance Fresh Foam BB")
+    r2 = make_record(brand="New Balance", model="Fresh Foam BB V2", model_raw="New Balance Fresh Foam BB V2")
+    report = resolve([r1, r2])
+    assert len(report.canonical) == 2
+    assert not report.ambiguous
+
+
+def test_model_key_folds_known_spelling_variants():
+    # misspelling
+    assert model_key("Adidas", "T-Mac Millenium") == model_key("Adidas", "T-Mac Millennium")
+    # alternate zero/O styling ('3ZER0' vs '3Zero')
+    assert model_key("Under Armour", "Curry 3ZER0 2") == model_key("Under Armour", "Curry 3Zero 2")
+    # 'Lo' vs 'Low'
+    assert model_key("Puma", "MB.01 Lo") == model_key("Puma", "MB.01 Low")
+    # New Balance's official 'WXY' vs the 'WAY' typo
+    assert model_key("New Balance", "TWO WAY V3") == model_key("New Balance", "TWO WXY V3")
+    # 'AD' dropped inconsistently between sites
+    assert model_key("Nike", "Kobe AD NXT 360") == model_key("Nike", "Kobe NXT 360")
+    # 'Fly.By' punctuation variant
+    assert model_key("Nike", "Fly By Mid 3") == model_key("Nike", "Fly.By Mid 3")
+    # Nike dropped 'Air' branding from the Zoom Air line
+    assert model_key("Nike", "Air Zoom GT Cut 2") == model_key("Nike", "Zoom GT Cut 2")
+
+
+def test_resolve_dotted_zero_versions_are_not_flagged_ambiguous():
+    r1 = make_record(brand="Jordan", model="Why Not Zero.1", model_raw="Jordan Why Not Zero.1")
+    r2 = make_record(brand="Jordan", model="Why Not Zero.2", model_raw="Jordan Why Not Zero.2")
+    report = resolve([r1, r2])
+    assert len(report.canonical) == 2
+    assert not report.ambiguous
 
 
 # -- resolution --------------------------------------------------------

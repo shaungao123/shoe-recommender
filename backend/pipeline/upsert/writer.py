@@ -70,27 +70,27 @@ class UpsertResult:
     inserted: int = 0
     updated: int = 0
     deleted: int = 0
-    skipped: int = 0
 
 
 def load_canonical(path: Path) -> list[dict[str, Any]]:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def shoe_values_from_canonical(shoe: dict[str, Any]) -> dict[str, Any] | None:
-    """Map a CanonicalShoe dict to Shoe column values; None if unusable."""
+def shoe_values_from_canonical(shoe: dict[str, Any]) -> dict[str, Any]:
+    """Map a CanonicalShoe dict to Shoe column values."""
     msrp_cents = shoe.get("msrp_usd_cents")
     if msrp_cents is None:
-        # price is NOT NULL and the budget hard-filter depends on it
-        logger.warning("skipping %s: no MSRP", shoe.get("canonical_id"))
-        return None
+        # price is nullable — the budget hard-filter (price <= max) simply
+        # never matches these rows, so they're stored but not recommended
+        # until a source supplies MSRP.
+        logger.warning("no MSRP for %s: storing with price=null", shoe.get("canonical_id"))
     image_urls = shoe.get("image_urls") or []
     sources = shoe.get("sources") or []
     return {
         "canonical_id": shoe["canonical_id"],
         "brand": shoe["brand"],
         "name": shoe["model"],
-        "price": Decimal(msrp_cents) / 100,
+        "price": Decimal(msrp_cents) / 100 if msrp_cents is not None else None,
         "currency": "USD",
         "image_url": image_urls[0] if image_urls else None,
         "affiliate_url": None,  # populated by the future affiliate-feed step
@@ -111,9 +111,6 @@ def upsert_shoes(session: Session, canonical: list[dict[str, Any]]) -> UpsertRes
     seen: set[str] = set()
     for shoe in canonical:
         values = shoe_values_from_canonical(shoe)
-        if values is None:
-            result.skipped += 1
-            continue
         seen.add(values["canonical_id"])
         row = existing.get(values["canonical_id"])
         if row is None:
@@ -171,12 +168,11 @@ def main(argv: list[str] | None = None) -> int:
             session.commit()
 
     logger.info(
-        "%sinserted=%d updated=%d deleted=%d skipped=%d",
+        "%sinserted=%d updated=%d deleted=%d",
         "dry run (rolled back): " if args.dry_run else "",
         result.inserted,
         result.updated,
         result.deleted,
-        result.skipped,
     )
     return 0
 

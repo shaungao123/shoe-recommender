@@ -68,8 +68,9 @@ def test_mapping_to_columns():
     ]
 
 
-def test_mapping_skips_shoe_without_msrp():
-    assert shoe_values_from_canonical(make_canonical(msrp_usd_cents=None)) is None
+def test_mapping_null_price_when_no_msrp():
+    values = shoe_values_from_canonical(make_canonical(msrp_usd_cents=None))
+    assert values["price"] is None
 
 
 def test_mapping_handles_empty_containers():
@@ -116,11 +117,11 @@ def test_update_keeps_row_identity(session):
     assert row.price == Decimal("159.00")
 
 
-def test_skipped_shoe_counted_and_not_written(session):
+def test_shoe_without_msrp_is_written_with_null_price(session):
     result = upsert_shoes(session, [make_canonical(msrp_usd_cents=None)])
     session.commit()
-    assert result.skipped == 1
-    assert session.scalars(select(Shoe)).all() == []
+    assert result.inserted == 1
+    assert session.scalars(select(Shoe)).one().price is None
 
 
 def test_rows_outside_batch_are_deleted(session):

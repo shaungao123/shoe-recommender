@@ -21,7 +21,10 @@ class Shoe(Base):
     )
     brand: Mapped[str] = mapped_column(String(128), nullable=False, index=True)
     name: Mapped[str] = mapped_column(String(256), nullable=False)
-    price: Mapped[float] = mapped_column(Numeric(10, 2), nullable=False)
+    # nullable: some corpus shoes have no MSRP from any source (discontinued
+    # models, non-review articles); they're excluded from budget-filtered
+    # results but still stored with their specs/reviews.
+    price: Mapped[float | None] = mapped_column(Numeric(10, 2), nullable=True)
     currency: Mapped[str] = mapped_column(String(3), nullable=False, default="USD")
     image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
     affiliate_url: Mapped[str | None] = mapped_column(Text, nullable=True)

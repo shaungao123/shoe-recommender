@@ -200,13 +200,31 @@ _ROMAN = {
 _DROP_TOKENS = {
     "the", "basketball", "shoe", "shoes", "performance", "review",
     "ep", "pe", "se", "team", "edition",
+    "ad",  # 'Kobe AD NXT 360' vs 'Kobe NXT 360' — sites drop it inconsistently
 }
 
 _TOKEN_ALIASES = {
     "zer0": "zero",
+    "3zer0": "3zero",  # 'Curry 3ZER0 2' vs 'Curry 3Zero 2'
     "vol": "volume",
     "don": "don",  # keep as-is (D.O.N. Issue)
+    "millenium": "millennium",  # common misspelling ('Adidas T-Mac Millenium')
+    "lo": "low",  # 'MB.01 Lo' vs 'MB.01 Low'
+    "way": "wxy",  # 'New Balance TWO WAY' vs the official 'TWO WXY'
 }
+
+# Raw substrings that must be fixed before tokenizing because they can't be
+# expressed as a single-token alias or a generic punctuation rule:
+_RAW_SUBSTITUTIONS = [
+    # 'Fly.By' is shaped exactly like an acronym ('G.T.', 'D.O.N.') so the
+    # generic period-handling can't tell them apart — hardcode this one.
+    ("fly.by", "fly by"),
+    # Nike dropped 'Air' branding across the Zoom Air line (~2022); sites are
+    # inconsistent about which name they use for the same shoe.
+    ("air zoom", "zoom"),
+]
+
+_VERSION_LETTER_TOKEN = re.compile(r"^v(\d+)$")
 
 
 def model_key(brand: str | None, model: str) -> str:
@@ -216,6 +234,14 @@ def model_key(brand: str | None, model: str) -> str:
     """
     s = model.lower()
     s = s.replace("&", " and ")
+    for old, new in _RAW_SUBSTITUTIONS:
+        s = s.replace(old, new)
+    # A period directly between an alphanumeric char and a digit is a
+    # version marker ('Why Not Zero.1', 'MB.01'), not acronym punctuation
+    # ('G.T.', 'D.O.N.' — those never precede a digit) — split it into its
+    # own token so trailing-version comparisons in numeric_signature() see
+    # the number instead of a fused 'zero1'/'mb01'.
+    s = re.sub(r"(?<=[a-z0-9])\.(?=\d)", " ", s)
     s = re.sub(r"[.'’]", "", s)  # G.T. → GT, D.O.N. → DON
     s = re.sub(r"[^a-z0-9]+", " ", s)
     brand_words = {
@@ -229,6 +255,8 @@ def model_key(brand: str | None, model: str) -> str:
             continue  # brand repeated inside the model name (e.g. 'Air Jordan')
         if token in _DROP_TOKENS:
             continue
+        if m := _VERSION_LETTER_TOKEN.fullmatch(token):
+            token = m.group(1)  # 'v2' -> '2': the letter is just styling
         token = _ROMAN.get(token, token)
         token = _TOKEN_ALIASES.get(token, token)
         tokens.append(token)
@@ -252,7 +280,9 @@ def numeric_signature(key: str) -> tuple[str, ...]:
 
     Numbers are versioning: keys whose signatures differ are different
     shoes, full stop — 'kobe 4 protro' vs 'kobe 8 protro', and
-    'all pro nitro' vs 'all pro nitro 2' (absent != present).
+    'all pro nitro' vs 'all pro nitro 2' (absent != present). model_key()
+    already folds 'v2'-style tokens down to a plain digit, so a plain
+    all-digits check here is enough.
     """
     return tuple(t for t in key.split() if re.fullmatch(r"\d+(?:\.\d+)?", t))
 

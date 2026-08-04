@@ -77,6 +77,13 @@ def _write_json(path: Path, data) -> None:
     )
 
 
+def _n_sources(shoe) -> int:
+    """Distinct source sites a shoe was seen on (shoe.sources has one entry
+    per matched *record*, so a site with several review pages for the same
+    shoe — e.g. multiple weartesters reviewers — must not be double-counted)."""
+    return len({s["source"] for s in shoe.sources})
+
+
 def coverage_report(canonical, records, unmatched, ambiguous) -> str:
     lines = ["", "=" * 62, "COVERAGE REPORT", "=" * 62]
 
@@ -84,10 +91,10 @@ def coverage_report(canonical, records, unmatched, ambiguous) -> str:
     lines.append(f"per-source records parsed: {dict(by_source)}")
 
     lines.append(f"canonical shoes: {len(canonical)}")
-    source_counts = Counter(len(shoe.sources) for shoe in canonical)
+    source_counts = Counter(_n_sources(shoe) for shoe in canonical)
     for n in sorted(source_counts, reverse=True):
         lines.append(f"  in {n} source(s): {source_counts[n]}")
-    multi = sum(1 for s in canonical if len(s.sources) >= 2)
+    multi = sum(1 for s in canonical if _n_sources(s) >= 2)
     lines.append(f"  cross-source (>=2): {multi}")
 
     lines.append("field fill rates (canonical):")
@@ -140,10 +147,10 @@ def main(argv: list[str] | None = None) -> int:
     canonical = report.canonical
     if args.pilot:
         # keep the shoes with the best cross-source coverage
-        canonical = [s for s in canonical if len(s.sources) >= 2]
+        canonical = [s for s in canonical if _n_sources(s) >= 2]
         canonical.sort(
             key=lambda s: (
-                -len(s.sources),
+                -_n_sources(s),
                 -sum(1 for f in MERGEABLE_FIELDS if getattr(s, f) is not None),
             )
         )
