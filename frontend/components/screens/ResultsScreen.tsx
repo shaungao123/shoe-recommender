@@ -6,8 +6,8 @@ import type { FeedbackVote, RecommendedShoe } from "@/lib/types";
 interface ResultsScreenProps {
   /** Ranked best-first. */
   shoes: RecommendedShoe[];
-  feedback: Record<string, FeedbackVote | null>;
-  onVote: (shoeId: string, vote: FeedbackVote) => void;
+  feedback: Record<number, FeedbackVote | null>;
+  onVote: (shoeId: number, vote: FeedbackVote) => void;
 }
 
 /** On desktop the top pick sits center podium: rank 2, rank 1, rank 3. */

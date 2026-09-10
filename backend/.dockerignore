@@ -1,0 +1,6 @@
+pipeline/
+tests/
+.venv
+__pycache__/
+*.md
+.git

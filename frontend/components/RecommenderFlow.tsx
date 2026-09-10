@@ -49,7 +49,7 @@ export function RecommenderFlow() {
   const [intake, setIntake] = useState<IntakeState>(EMPTY_INTAKE);
   const [stage, setStage] = useState(0);
   const [shoes, setShoes] = useState<RecommendedShoe[]>([]);
-  const [feedback, setFeedback] = useState<Record<string, FeedbackVote | null>>(
+  const [feedback, setFeedback] = useState<Record<number, FeedbackVote | null>>(
     {},
   );
 
@@ -108,7 +108,7 @@ export function RecommenderFlow() {
   }, [clearTimers]);
 
   const vote = useCallback(
-    (shoeId: string, v: FeedbackVote) => {
+    (shoeId: number, v: FeedbackVote) => {
       const next = feedback[shoeId] === v ? null : v;
       setFeedback((prev) => ({ ...prev, [shoeId]: next }));
       if (next) sendFeedback({ shoe_id: shoeId, vote: next });
