@@ -1,0 +1,13 @@
+services:
+  backend:
+    build: ./backend
+    env_file: backend/.env
+    ports: ["8000:8000"]
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        NEXT_PUBLIC_API_URL: http://localhost:8000/api
+        NEXT_PUBLIC_USE_MOCK_API: "false"
+    ports: ["3000:3000"]
+    depends_on: [backend]
