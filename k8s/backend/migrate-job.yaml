@@ -5,6 +5,7 @@ metadata:
   namespace: shoe-recommender
 spec:
   backoffLimit: 2
+  ttlSecondsAfterFinished: 600   # GC the finished Job + pod 10 min after completion
   template:
     spec:
       restartPolicy: Never
@@ -15,5 +16,3 @@ spec:
           envFrom:
             - configMapRef: { name: backend-config }
             - secretRef: { name: backend-secrets }
-      backoffLimit: 2
-      ttlSecondsAfterFinished: 600
