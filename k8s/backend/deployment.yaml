@@ -5,6 +5,14 @@ metadata:
   namespace: shoe-recommender
 spec:
   replicas: 1
+  # Single node, single replica: there is no room to run old+new simultaneously.
+  # maxSurge 0 / maxUnavailable 1 terminates the old pod first, then starts the new
+  # one. Costs a few seconds of downtime per deploy — honest for a no-HA setup.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels: { app: backend }
   template:
