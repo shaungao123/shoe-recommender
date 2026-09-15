@@ -1,0 +1,19 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: migrate-placeholder   # CI/you rename per deploy, e.g. migrate-<short-sha>
+  namespace: shoe-recommender
+spec:
+  backoffLimit: 2
+  template:
+    spec:
+      restartPolicy: Never
+      containers:
+        - name: migrate
+          image: ghcr.io/isaacpressman/shoe-recommender-backend:placeholder
+          command: ["alembic", "upgrade", "head"]
+          envFrom:
+            - configMapRef: { name: backend-config }
+            - secretRef: { name: backend-secrets }
+      backoffLimit: 2
+      ttlSecondsAfterFinished: 600
