@@ -64,7 +64,6 @@ _DEFAULT_METADATA = {
             "fetched_at": "2026-07-04T00:00:00+00:00",
         }
     ],
-    "image_urls": ["https://example.com/gt3.jpg"],
 }
 
 

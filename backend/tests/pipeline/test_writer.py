@@ -33,7 +33,6 @@ def make_canonical(**kwargs) -> dict:
         pros=[{"source": "runrepeat", "text": "elite grip"}],
         cons=[],
         review_text=[],
-        image_urls=["http://img/gt3-a.png", "http://img/gt3-b.png"],
         affiliate_url=None,
         provenance={"msrp_usd_cents": {"source": "runrepeat", "url": "http://rr/gt3"}},
         sources=[{"source": "runrepeat", "url": "http://rr/gt3", "fetched_at": "t"}],
@@ -52,7 +51,7 @@ def test_mapping_to_columns():
     assert values["name"] == "G.T. Cut 3"
     assert values["price"] == Decimal("190.00")
     assert values["currency"] == "USD"
-    assert values["image_url"] == "http://img/gt3-a.png"
+    assert values["image_url"] is None
     assert values["affiliate_url"] is None
     assert values["source_url"] == "http://rr/gt3"
     assert values["specs"]["cushioning_tech"] == "ZoomX"
@@ -62,10 +61,7 @@ def test_mapping_to_columns():
         "runrepeat": {"overall": 88},
         "weartesters": {"traction": 9},
     }
-    assert values["extra_metadata"]["image_urls"] == [
-        "http://img/gt3-a.png",
-        "http://img/gt3-b.png",
-    ]
+    assert "image_urls" not in values["extra_metadata"]
 
 
 def test_mapping_null_price_when_no_msrp():
@@ -74,7 +70,7 @@ def test_mapping_null_price_when_no_msrp():
 
 
 def test_mapping_handles_empty_containers():
-    values = shoe_values_from_canonical(make_canonical(image_urls=[], sources=[]))
+    values = shoe_values_from_canonical(make_canonical(sources=[]))
     assert values["image_url"] is None
     assert values["source_url"] is None
 
@@ -137,3 +133,31 @@ def test_rows_outside_batch_are_deleted(session):
 
     assert (result.inserted, result.deleted) == (1, 2)
     assert session.scalars(select(Shoe)).one().canonical_id == "nike-gt-cut-3"
+
+
+def test_upsert_preserves_image_url_and_image_search(session):
+    upsert_shoes(session, [make_canonical()])
+    session.commit()
+    row = session.scalars(select(Shoe)).one()
+    row.image_url = "https://proj.supabase.co/storage/v1/object/public/shoe-images/nike-gt-cut-3.jpg"
+    row.extra_metadata = {
+        **(row.extra_metadata or {}),
+        "image_search": {
+            "query": "Nike G.T. Cut 3 basketball shoe",
+            "publisher_url": "https://nike.com/gt3.jpg",
+            "miss": False,
+        },
+    }
+    session.commit()
+
+    result = upsert_shoes(session, [make_canonical(msrp_usd_cents=15900)])
+    session.commit()
+
+    row = session.scalars(select(Shoe)).one()
+    assert result.updated == 1
+    assert row.price == Decimal("159.00")
+    assert row.image_url == (
+        "https://proj.supabase.co/storage/v1/object/public/shoe-images/nike-gt-cut-3.jpg"
+    )
+    assert row.extra_metadata["image_search"]["publisher_url"] == "https://nike.com/gt3.jpg"
+    assert row.extra_metadata["metrics"]["runrepeat"]["overall"] == 88

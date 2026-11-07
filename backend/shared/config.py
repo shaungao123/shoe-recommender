@@ -15,6 +15,14 @@ class Settings(BaseSettings):
     openai_api_key: str = ""
     # Browser origins allowed to call the API (CORS). Frontend dev server by default.
     cors_allow_origins: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000"]
+    # Manual ``pipeline.images.search`` only — not used by the API.
+    google_cloud_project: str = ""
+    vertex_search_app_id: str = ""
+    vertex_search_location: str = "global"
+    # Service account JSON key path; empty falls back to Application Default Credentials.
+    google_application_credentials: str = ""
+    supabase_url: str = ""
+    supabase_service_role_key: str = ""
 
     @field_validator("database_url")
     @classmethod

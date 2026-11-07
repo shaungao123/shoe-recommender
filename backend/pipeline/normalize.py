@@ -346,9 +346,6 @@ def _merge_group(key: str, records: list[SourceRecord]) -> CanonicalShoe:
         shoe.review_text.extend(
             {"source": record.source, "text": seg} for seg in record.review_text
         )
-        for img in record.image_urls:
-            if img not in shoe.image_urls:
-                shoe.image_urls.append(img)
         # union tags across sources (order = priority)
         for tag in record.position_tags:
             if tag not in shoe.position_tags:

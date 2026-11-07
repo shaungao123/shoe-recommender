@@ -9,6 +9,10 @@ table match it: upserts by ``canonical_id``, then deletes every row that is
 not in the batch — including rows with no ``canonical_id`` at all (pre-pipeline
 mock data). Run explicitly, never as part of the scrape run. Embedding vectors
 are a separate later step (``pipeline.embed``).
+
+``image_url`` and ``extra_metadata.image_search`` are owned by
+``pipeline.images.search``, not the scrape. New rows start with a null image;
+updates keep whatever photo that script already saved.
 """
 
 from __future__ import annotations
@@ -54,6 +58,7 @@ SPEC_FIELDS = (
 
 # Everything provenance/review-shaped goes to `extra_metadata`. `metrics`
 # stays keyed per source — scores are never averaged across sources.
+# Photos are filled by ``pipeline.images.search``; do not write scraped URLs.
 METADATA_FIELDS = (
     "metrics",
     "pros",
@@ -61,7 +66,6 @@ METADATA_FIELDS = (
     "review_text",
     "provenance",
     "sources",
-    "image_urls",
 )
 
 
@@ -77,14 +81,17 @@ def load_canonical(path: Path) -> list[dict[str, Any]]:
 
 
 def shoe_values_from_canonical(shoe: dict[str, Any]) -> dict[str, Any]:
-    """Map a CanonicalShoe dict to Shoe column values."""
+    """Map a CanonicalShoe dict to Shoe column values.
+
+    ``image_url`` is always null here — the image search command owns that
+    column. Callers that update an existing row must preserve the prior value.
+    """
     msrp_cents = shoe.get("msrp_usd_cents")
     if msrp_cents is None:
         # price is nullable — the budget hard-filter (price <= max) simply
         # never matches these rows, so they're stored but not recommended
         # until a source supplies MSRP.
         logger.warning("no MSRP for %s: storing with price=null", shoe.get("canonical_id"))
-    image_urls = shoe.get("image_urls") or []
     sources = shoe.get("sources") or []
     return {
         "canonical_id": shoe["canonical_id"],
@@ -92,7 +99,7 @@ def shoe_values_from_canonical(shoe: dict[str, Any]) -> dict[str, Any]:
         "name": shoe["model"],
         "price": Decimal(msrp_cents) / 100 if msrp_cents is not None else None,
         "currency": "USD",
-        "image_url": image_urls[0] if image_urls else None,
+        "image_url": None,
         "affiliate_url": None,  # populated by the future affiliate-feed step
         "source_url": sources[0]["url"] if sources else None,
         "specs": {f: shoe.get(f) for f in SPEC_FIELDS},
@@ -117,6 +124,14 @@ def upsert_shoes(session: Session, canonical: list[dict[str, Any]]) -> UpsertRes
             session.add(Shoe(**values))
             result.inserted += 1
         else:
+            # Photos are owned by pipeline.images.search — keep them.
+            values["image_url"] = row.image_url
+            prior_search = (row.extra_metadata or {}).get("image_search")
+            if prior_search is not None:
+                values["extra_metadata"] = {
+                    **values["extra_metadata"],
+                    "image_search": prior_search,
+                }
             changed = False
             for field, value in values.items():
                 if getattr(row, field) != value:
