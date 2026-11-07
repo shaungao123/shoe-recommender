@@ -17,10 +17,12 @@ from pipeline.images.search import (
     choose_downloadable_image,
     group_by_unique_name,
     has_prior_image_search,
+    hit_matches_name,
     normalize_for_match,
     parse_google_api_error,
     public_object_url,
     run_search,
+    score_hit,
     search_images,
     select_hits_for_name,
 )
@@ -172,6 +174,11 @@ def test_search_images_posts_image_search_and_parses_results():
                             "derivedStructData": {
                                 "title": "Dame 9",
                                 "link": "https://assets.adidas.com/dame9.jpg",
+                                "image": {
+                                    "contextLink": "https://www.adidas.com/us/dame-9/ID1.html",
+                                    "width": "1000",
+                                    "height": "800",
+                                },
                             }
                         }
                     },
@@ -183,7 +190,15 @@ def test_search_images_posts_image_search_and_parses_results():
     with httpx.Client(transport=httpx.MockTransport(handler)) as client:
         hits = search_images(client, search=SEARCH, query="Adidas Dame 9")
 
-    assert hits == [SearchHit("Dame 9", "https://assets.adidas.com/dame9.jpg")]
+    assert hits == [
+        SearchHit(
+            "Dame 9",
+            "https://assets.adidas.com/dame9.jpg",
+            "https://www.adidas.com/us/dame-9/ID1.html",
+            width=1000,
+            height=800,
+        )
+    ]
     assert seen["url"] == (
         "https://discoveryengine.googleapis.com/v1/projects/proj/locations/global"
         "/collections/default_collection/engines/shoes-app"
@@ -282,6 +297,41 @@ def test_run_search_skips_existing_unless_refresh(session, monkeypatch):
         )
     assert refreshed.searched == 1
     assert refreshed.uploaded == 1
+
+
+def test_run_search_retry_misses_only_requeries_rows_without_image(session, monkeypatch):
+    found = _shoe(
+        canonical_id="nike-sabrina-2",
+        brand="Nike",
+        name="Sabrina 2",
+        image_url="https://cdn.example/sabrina.jpg",
+        extra_metadata={"image_search": {"query": "q", "miss": False}},
+    )
+    missed = _shoe(extra_metadata={"image_search": {"query": "q", "miss": True}})
+    session.add_all([found, missed])
+    session.commit()
+
+    called: list[str] = []
+
+    def fake_process(session, client, row, **kwargs):
+        called.append(row.canonical_id)
+        return "missed"
+
+    monkeypatch.setattr("pipeline.images.search.process_shoe", fake_process)
+    with httpx.Client() as client:
+        result = run_search(
+            session,
+            client,
+            refresh=False,
+            retry_misses=True,
+            limit=None,
+            search=SEARCH,
+            supabase_url="https://proj.supabase.co",
+            service_role_key="secret",
+        )
+
+    assert called == ["adidas-dame-9"]
+    assert (result.searched, result.skipped) == (1, 1)
 
 
 def test_run_search_stops_on_quota_error(session, monkeypatch):
@@ -457,13 +507,142 @@ def test_select_hits_drops_neighbouring_models_and_prefers_product_pages():
         SearchHit("AG 55 retro", "https://x/ag55.png", "https://x/products/ag-55"),
     ]
     matching, rejected = select_hits_for_name(hits, "AG 5")
-    assert [h.link for h in matching] == [
+    assert [h.link for h, _ in matching] == [
         "https://x/slug.png",
         "https://x/coll.jpg",
         "https://x/blog.png",
     ]
     assert [r.link for r in rejected] == ["https://x/ag6.png", "https://x/ag55.png"]
     assert {r.why for r in rejected} == {"name_mismatch"}
+
+
+def test_select_hits_rejects_banners_and_thumbnails_by_reported_size():
+    page = "https://www.nike.com/t/sabrina-2"
+    hits = [
+        SearchHit("Sabrina 2", "https://x/banner.jpg", page, width=1920, height=600),
+        SearchHit("Sabrina 2", "https://x/thumb.jpg", page, width=120, height=120),
+        SearchHit("Sabrina 2", "https://x/portrait.jpg", page, width=600, height=1200),
+        SearchHit("Sabrina 2", "https://x/shot.jpg", page, width=1000, height=1000),
+        SearchHit("Sabrina 2", "https://x/unknown.jpg", page),
+    ]
+    matching, rejected = select_hits_for_name(hits, "Sabrina 2")
+    assert [h.link for h, _ in matching] == ["https://x/shot.jpg", "https://x/unknown.jpg"]
+    assert [(r.link, r.why) for r in rejected] == [
+        ("https://x/banner.jpg", "bad_shape"),
+        ("https://x/thumb.jpg", "too_small"),
+        ("https://x/portrait.jpg", "bad_shape"),
+    ]
+
+
+def test_score_prefers_brand_and_retail_over_news_and_penalizes_junk_filenames():
+    def hit(link, page):
+        return SearchHit("Sabrina 2", link, page, width=1000, height=1000)
+
+    brand = hit("https://static.nike.com/a.jpg", "https://www.nike.com/t/sabrina-2")
+    retail = hit("https://images.footlocker.com/a.jpg", "https://www.footlocker.com/product/sabrina-2")
+    review = hit("https://weartesters.com/a.jpg", "https://weartesters.com/nike-sabrina-2-review/")
+    news = hit("https://sneakernews.com/a.jpg", "https://sneakernews.com/2024/nike-sabrina-2/")
+    junk = hit("https://sneakernews.com/Screen-Shot-2024.png", "https://sneakernews.com/2024/nike-sabrina-2/")
+    named = hit("https://sneakernews.com/sabrina-2-white.jpg", "https://sneakernews.com/2024/nike-sabrina-2/")
+
+    scores = {k: score_hit(h, "Sabrina 2") for k, h in
+              dict(brand=brand, retail=retail, review=review, news=news, junk=junk, named=named).items()}
+    assert scores["retail"] > scores["review"] > scores["news"] > scores["junk"]
+    assert scores["named"] > scores["news"]
+    # a product page on a retailer beats a brand-site article
+    assert scores["retail"] > score_hit(
+        hit("https://static.nike.com/b.jpg", "https://www.nike.com/launch/sabrina-2"), "Sabrina 2"
+    )
+
+
+@pytest.mark.parametrize(
+    ("name", "title", "expected"),
+    [
+        ("MB.04 Low", "MB.04 Lo Team Basketball Shoes Unisex | Puma Finland", True),
+        ("Chuck 70 Hi", "Chuck 70 High Top", True),
+        ("Way of Wade All City 13 Encore", 'Wade All City 13 Encore "Lunar Rock" | Way of Wade', True),
+        ("Way of Wade 6", 'Wade 808 6 Ultra "Dark Stingray" | Way of Wade', False),
+        ("Kyrie 3", 'ANTA KAI 3 "Chinese New Year" | Kyrie Irving Basketball Shoes', False),
+        ("LeBron 7", "LeBron Witness 7 Big Kids' Basketball Shoes. Nike.com", False),
+    ],
+)
+def test_hit_matches_name_aliases_and_way_of_wade(name, title, expected):
+    assert hit_matches_name(SearchHit(title, "https://x/img.jpg"), name) is expected
+
+
+def test_upload_retries_server_errors_then_succeeds(monkeypatch):
+    from pipeline.images import search as search_mod
+
+    monkeypatch.setattr(search_mod.time, "sleep", lambda _: None)
+    statuses = iter([520, 502, 200])
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(next(statuses), json={})
+
+    with httpx.Client(transport=httpx.MockTransport(handler)) as client:
+        url = search_mod.upload_to_supabase(
+            client,
+            supabase_url="https://proj.supabase.co",
+            service_role_key="secret",
+            object_path="nike-gt-hustle-academy.jpg",
+            body=b"\xff\xd8",
+            content_type="image/jpeg",
+        )
+    assert url.endswith("/shoe-images/nike-gt-hustle-academy.jpg")
+
+
+def test_score_ranks_kickscrew_above_brand_product_page():
+    kickscrew = SearchHit(
+        "361 Degrees AG 2", "https://cdn.shopify.com/main-square.jpg",
+        "https://www.kickscrew.com/products/361-ag-2", width=1000, height=1000,
+    )
+    brand = SearchHit(
+        "AG 2", "https://www.361usa.com/cdn/a.png",
+        "https://www.361usa.com/products/ag-2", width=1000, height=1000,
+    )
+    assert score_hit(kickscrew, "AG 2") > score_hit(brand, "AG 2")
+
+
+def test_process_shoe_falls_back_to_kickscrew_query(session, monkeypatch):
+    from pipeline.images import search as search_mod
+
+    row = _shoe(canonical_id="anta-kt-2", brand="Anta", name="KT 2")
+    session.add(row)
+    session.commit()
+    queries: list[str] = []
+
+    def fake_search(client, *, search, query):
+        queries.append(query)
+        if query.startswith("kickscrew"):
+            return [SearchHit("Anta KT 2 'Home'", "https://cdn.shopify.com/kt2.jpg",
+                              "https://www.kickscrew.com/products/anta-kt-2-home")]
+        return [SearchHit("ANTA KAI 2", "https://x/kai2.jpg")]
+
+    monkeypatch.setattr(search_mod, "search_images", fake_search)
+    monkeypatch.setattr(
+        search_mod,
+        "choose_downloadable_image",
+        lambda client, hits: search_mod.ChosenImage(
+            publisher_url=hits[0].link, content_type="image/jpeg", body=b"\xff\xd8", rejected=[]
+        ),
+    )
+    monkeypatch.setattr(
+        search_mod, "upload_to_supabase",
+        lambda client, **kw: public_object_url(kw["supabase_url"], kw["object_path"]),
+    )
+
+    with httpx.Client() as client:
+        outcome = search_mod.process_shoe(
+            session, client, row,
+            search=SEARCH, supabase_url="https://proj.supabase.co", service_role_key="secret",
+        )
+
+    assert outcome == "uploaded"
+    assert queries == ["Anta KT 2 basketball shoe", "kickscrew Anta KT 2"]
+    meta = row.extra_metadata["image_search"]
+    assert meta["query"] == "kickscrew Anta KT 2"
+    assert meta["publisher_url"] == "https://cdn.shopify.com/kt2.jpg"
+    assert [r["why"] for r in meta["rejected"]] == ["name_mismatch"]
 
 
 def test_process_shoe_misses_when_no_hit_names_the_shoe(session, monkeypatch):

@@ -2,11 +2,13 @@
 
     python -m pipeline.images.search
     python -m pipeline.images.search --refresh
+    python -m pipeline.images.search --retry-misses
     python -m pipeline.images.search --limit 5
 
-Searches once per unique brand+name (not once per table row), takes the first
-downloadable result (the Vertex AI Search app's website data store is limited
-to brand sites), uploads it to the public ``shoe-images`` bucket, and writes the
+Searches once per unique brand+name (not once per table row), keeps results
+whose page names the shoe and whose dimensions could be a product shot, tries
+them best score first (page type, site tier, shape, filename), uploads the
+first that downloads to the public ``shoe-images`` bucket, and writes the
 public URL onto every row that shares that brand+name.
 
 Image search needs a website-search app with Enterprise edition features on and
@@ -23,6 +25,7 @@ import argparse
 import logging
 import re
 import sys
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
@@ -46,6 +49,8 @@ USER_AGENT = (
 )
 DOWNLOAD_TIMEOUT = 30.0
 SEARCH_TIMEOUT = 30.0
+UPLOAD_ATTEMPTS = 3
+UPLOAD_RETRY_DELAY = 2.0
 
 
 @dataclass
@@ -53,6 +58,8 @@ class SearchHit:
     title: str
     link: str
     context_link: str = ""
+    width: int | None = None
+    height: int | None = None
 
 
 @dataclass
@@ -207,20 +214,34 @@ def search_images(
         link = data.get("link")
         if not link:
             continue
+        image = data.get("image") or {}
         hits.append(
             SearchHit(
                 title=data.get("title") or "",
                 link=link,
-                context_link=(data.get("image") or {}).get("contextLink") or "",
+                context_link=image.get("contextLink") or "",
+                width=_as_int(image.get("width")),
+                height=_as_int(image.get("height")),
             )
         )
     return hits
 
 
+def _as_int(value: Any) -> int | None:
+    """Google serializes int64 fields as strings."""
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
+_MATCH_ALIASES = {"lo": "low", "hi": "high"}
+
+
 def normalize_for_match(text: str) -> str:
     """Lowercase words; split letter/digit runs so "AG5", "ag-5", "AG 5" all become "ag 5"."""
     text = re.sub(r"(?<=[a-zA-Z])(?=\d)|(?<=\d)(?=[a-zA-Z])", " ", text.lower())
-    return " ".join(re.findall(r"[a-z0-9]+", text))
+    return " ".join(_MATCH_ALIASES.get(w, w) for w in re.findall(r"[a-z0-9]+", text))
 
 
 def hit_matches_name(hit: SearchHit, name: str) -> bool:
@@ -232,31 +253,113 @@ def hit_matches_name(hit: SearchHit, name: str) -> bool:
     phrase = normalize_for_match(name)
     if not phrase:
         return False
-    pattern = re.compile(rf"\b{re.escape(phrase)}\b")
+    # Li-Ning's own site titles drop "Way of" ("Wade All City 13 Encore")
+    pattern = re.compile(rf"\b{re.sub(r'^way of (?=wade )', '(?:way of )?', phrase)}\b")
     haystacks = (hit.title, urlsplit(hit.context_link).path)
     return any(pattern.search(normalize_for_match(h)) for h in haystacks)
 
 
-def _page_kind_rank(hit: SearchHit) -> int:
+BRAND_DOMAINS = (
+    "361usa.com", "361sport.com", "adidas.com", "anta.com", "asics.com",
+    "converse.com", "nike.com", "lining.com", "wayofwade.com", "newbalance.com",
+    "peaksport.com", "puma.com", "reebok.com", "underarmour.com", "xtep.com",
+)
+RETAIL_DOMAINS = (
+    "footlocker.com", "champssports.com", "finishline.com", "jdsports.com",
+    "dickssportinggoods.com", "hibbett.com", "shoepalace.com", "snipesusa.com",
+    "dtlr.com", "zappos.com", "kicksusa.com", "titan22.com",
+    "basketballemotion.com", "stockx.com", "goat.com", "flightclub.com",
+    "stadiumgoods.com",
+)
+REVIEW_DOMAINS = (
+    "weartesters.com", "runrepeat.com", "thehoopsgeek.com", "basketballshoespecs.com",
+)
+# Consistent square product shots for nearly every model, including Chinese brands.
+PREFERRED_DOMAINS = ("kickscrew.com",)
+# Anything else (sneaker news, aggregators) scores as the lowest site tier.
+SITE_TIER_SCORES = (
+    (PREFERRED_DOMAINS, 40),
+    (BRAND_DOMAINS, 30),
+    (RETAIL_DOMAINS, 20),
+    (REVIEW_DOMAINS, 10),
+)
+# Second query when the general one yields nothing usable; general results
+# often crowd KicksCrew out of the top 10.
+FALLBACK_QUERY_PREFIX = "kickscrew"
+
+MIN_IMAGE_SIDE = 300
+MAX_ASPECT = 2.0  # wider than 2:1 is a banner
+MIN_ASPECT = 0.6  # taller than 3:5 is a portrait / lifestyle shot
+_JUNK_FILENAME = re.compile(
+    r"\b(?:screen shot|screenshot|banner|logo|email|hero|icon|sprite|thumb|thumbnail|"
+    r"placeholder|grid|header|social|og image)\b"
+)
+
+
+def _host(url: str) -> str:
+    return (urlsplit(url).hostname or "").lower()
+
+
+def _on_domain(host: str, domains: tuple[str, ...]) -> bool:
+    return any(host == d or host.endswith("." + d) for d in domains)
+
+
+def shape_rejection(hit: SearchHit) -> str | None:
+    """'too_small' / 'bad_shape' when the reported dimensions rule out a product shot."""
+    if not hit.width or not hit.height:
+        return None
+    if min(hit.width, hit.height) < MIN_IMAGE_SIDE:
+        return "too_small"
+    if not MIN_ASPECT <= hit.width / hit.height <= MAX_ASPECT:
+        return "bad_shape"
+    return None
+
+
+def score_hit(hit: SearchHit, name: str) -> int:
+    """Higher = more likely a clean product photo of this shoe."""
+    score = 0
     path = urlsplit(hit.context_link).path.lower()
-    if "/products/" in path or "/product/" in path:
-        return 0
-    if "/collections/" in path:
-        return 1
-    return 2
+    if "/products/" in path or "/product/" in path or path.startswith("/t/"):  # nike.com/t/…
+        score += 30
+    elif "/collections/" in path:
+        score += 15
+
+    host = _host(hit.context_link) or _host(hit.link)
+    score += next((pts for domains, pts in SITE_TIER_SCORES if _on_domain(host, domains)), 0)
+
+    if hit.width and hit.height:
+        if 0.75 <= hit.width / hit.height <= 1.5:
+            score += 10
+        if min(hit.width, hit.height) >= 800:
+            score += 5
+
+    filename = normalize_for_match(urlsplit(hit.link).path.rsplit("/", 1)[-1])
+    phrase = normalize_for_match(name)
+    if phrase and re.search(rf"\b{phrase}\b", filename):
+        score += 10
+    if _JUNK_FILENAME.search(filename):
+        score -= 25
+    return score
 
 
 def select_hits_for_name(
     hits: list[SearchHit], name: str
-) -> tuple[list[SearchHit], list[CandidateNote]]:
-    """Hits whose page names this shoe (product pages first), plus notes for the rest."""
-    matching = [h for h in hits if hit_matches_name(h, name)]
-    rejected = [
-        CandidateNote(title=h.title, link=h.link, why="name_mismatch")
-        for h in hits
-        if not hit_matches_name(h, name)
-    ]
-    return sorted(matching, key=_page_kind_rank), rejected
+) -> tuple[list[tuple[SearchHit, int]], list[CandidateNote]]:
+    """Hits that name this shoe and could be a product shot, best score first.
+
+    Returns ``(hit, score)`` pairs (ties keep search order) plus notes for
+    every hit dropped and why.
+    """
+    kept: list[tuple[SearchHit, int]] = []
+    rejected: list[CandidateNote] = []
+    for hit in hits:
+        why = "name_mismatch" if not hit_matches_name(hit, name) else shape_rejection(hit)
+        if why:
+            rejected.append(CandidateNote(title=hit.title, link=hit.link, why=why))
+        else:
+            kept.append((hit, score_hit(hit, name)))
+    kept.sort(key=lambda pair: -pair[1])
+    return kept, rejected
 
 
 def download_image(client: httpx.Client, url: str) -> tuple[bytes, str] | None:
@@ -323,7 +426,20 @@ def upload_to_supabase(
         "Content-Type": content_type.split(";")[0].strip(),
         "x-upsert": "true",
     }
-    response = client.post(upload_url, content=body, headers=headers, timeout=DOWNLOAD_TIMEOUT)
+    for attempt in range(UPLOAD_ATTEMPTS):
+        response = client.post(
+            upload_url, content=body, headers=headers, timeout=DOWNLOAD_TIMEOUT
+        )
+        if response.status_code < 500:
+            break
+        logger.warning(
+            "supabase upload status %s for %s (attempt %d/%d)",
+            response.status_code,
+            object_path,
+            attempt + 1,
+            UPLOAD_ATTEMPTS,
+        )
+        time.sleep(UPLOAD_RETRY_DELAY * (attempt + 1))
     if response.status_code not in (200, 201):
         raise RuntimeError(
             f"supabase upload failed status={response.status_code} body={response.text[:300]}"
@@ -339,6 +455,7 @@ def build_image_search_meta(
     public_url: str | None,
     rejected: list[CandidateNote],
     miss: bool,
+    score: int | None = None,
 ) -> dict[str, Any]:
     return {
         "query": query,
@@ -347,6 +464,7 @@ def build_image_search_meta(
         "storage_path": storage_path,
         "public_url": public_url,
         "miss": miss,
+        "score": score,
         "rejected": [
             {"title": c.title, "link": c.link, "why": c.why} for c in rejected
         ],
@@ -395,9 +513,17 @@ def process_shoe(
     """Search, upload, and update one shoe. Returns 'uploaded' | 'missed'."""
     assert row.canonical_id is not None
     query = f"{row.brand} {row.name} basketball shoe"
-    hits, mismatched = select_hits_for_name(
+    scored, mismatched = select_hits_for_name(
         search_images(client, search=search, query=query), row.name or ""
     )
+    if not scored:
+        query = f"{FALLBACK_QUERY_PREFIX} {row.brand} {row.name}"
+        scored, more_mismatched = select_hits_for_name(
+            search_images(client, search=search, query=query), row.name or ""
+        )
+        mismatched += more_mismatched
+    hits = [hit for hit, _ in scored]
+    scores = {hit.link: score for hit, score in scored}
     if not hits:
         meta = build_image_search_meta(
             query=query,
@@ -446,6 +572,7 @@ def process_shoe(
         public_url=public_url,
         rejected=mismatched + chosen.rejected,
         miss=False,
+        score=scores.get(chosen.publisher_url),
     )
     row.image_url = public_url
     row.extra_metadata = {**(row.extra_metadata or {}), "image_search": meta}
@@ -461,6 +588,7 @@ def run_search(
     search: VertexSearchConfig,
     supabase_url: str,
     service_role_key: str,
+    retry_misses: bool = False,
 ) -> SearchRunResult:
     result = SearchRunResult()
     rows = list(
@@ -476,7 +604,8 @@ def run_search(
         primary = group[0]
         siblings = group[1:]
         canonical_id = primary.canonical_id
-        if not refresh and any(has_prior_image_search(row) for row in group):
+        retry = retry_misses and not any(row.image_url for row in group)
+        if not refresh and not retry and any(has_prior_image_search(row) for row in group):
             donor = next(row for row in group if has_prior_image_search(row))
             apply_image_result(donor, [row for row in group if row is not donor])
             session.commit()
@@ -522,6 +651,11 @@ def main(argv: list[str] | None = None) -> int:
         "--refresh",
         action="store_true",
         help="re-query shoes that already have extra_metadata.image_search",
+    )
+    parser.add_argument(
+        "--retry-misses",
+        action="store_true",
+        help="re-query only shoes that have no image yet (earlier misses)",
     )
     parser.add_argument(
         "--limit",
@@ -582,6 +716,7 @@ def main(argv: list[str] | None = None) -> int:
             session,
             client,
             refresh=args.refresh,
+            retry_misses=args.retry_misses,
             limit=args.limit,
             search=search,
             supabase_url=settings.supabase_url,

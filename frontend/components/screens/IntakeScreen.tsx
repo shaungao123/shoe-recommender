@@ -29,10 +29,21 @@ interface IntakeScreenProps {
   onSimulateError: () => void;
 }
 
-function SectionLabel({ children }: { children: React.ReactNode }) {
+function SectionLabel({
+  children,
+  required = false,
+}: {
+  children: React.ReactNode;
+  required?: boolean;
+}) {
   return (
-    <div className="mb-3.5 text-xs/none font-bold tracking-[.06em] text-ink uppercase">
+    <div className="mb-3.5 flex items-center gap-2 text-xs/none font-bold tracking-[.06em] text-ink uppercase">
       {children}
+      {required && (
+        <span className="text-[11px]/none font-semibold tracking-normal text-accent normal-case">
+          Required
+        </span>
+      )}
     </div>
   );
 }
@@ -51,6 +62,12 @@ export function IntakeScreen({
         : [...intake.styles, label],
     });
 
+  const missing = [
+    !intake.position && "a position",
+    !intake.styles.length && !intake.freeText.trim() && "a style",
+  ].filter((item): item is string => Boolean(item));
+  const canSubmit = missing.length === 0;
+
   const inputClass =
     "w-full rounded-xl border-[1.5px] border-line bg-white px-4 py-3.5 text-[15px]/[1.4] outline-none focus:border-ink";
 
@@ -65,7 +82,7 @@ export function IntakeScreen({
       </p>
 
       <div className="mb-9">
-        <SectionLabel>Position</SectionLabel>
+        <SectionLabel required>Position</SectionLabel>
         <div className="flex flex-wrap gap-2.5">
           {POSITIONS.map((label) => (
             <Chip
@@ -79,7 +96,7 @@ export function IntakeScreen({
       </div>
 
       <div className="mb-9">
-        <SectionLabel>Style — pick any that fit</SectionLabel>
+        <SectionLabel required>Style — pick any that fit</SectionLabel>
         <div className="mb-4 flex flex-wrap gap-2.5">
           {STYLE_TAGS.map((label) => (
             <Chip
@@ -93,20 +110,25 @@ export function IntakeScreen({
         <input
           value={intake.freeText}
           onChange={(e) => onChange({ ...intake, freeText: e.target.value })}
-          placeholder="Optional — describe your game in your own words"
+          placeholder="Or describe your game in your own words"
           className={inputClass}
         />
       </div>
 
       <div className="mb-9">
-        <SectionLabel>Budget cap</SectionLabel>
+        <SectionLabel>Budget cap — optional</SectionLabel>
         <div className="flex flex-wrap gap-2.5">
           {BUDGETS.map((label) => (
             <Chip
               key={label}
               label={label}
               selected={intake.budget === label}
-              onClick={() => onChange({ ...intake, budget: label })}
+              onClick={() =>
+                onChange({
+                  ...intake,
+                  budget: intake.budget === label ? null : label,
+                })
+              }
             />
           ))}
         </div>
@@ -125,10 +147,16 @@ export function IntakeScreen({
       <button
         type="button"
         onClick={onSubmit}
-        className="w-full cursor-pointer rounded-full bg-accent p-[18px] text-[15px]/none font-bold text-white shadow-[0_10px_24px_rgba(255,90,31,.28)] transition-colors hover:bg-accent-deep"
+        disabled={!canSubmit}
+        className="w-full cursor-pointer rounded-full bg-accent p-[18px] text-[15px]/none font-bold text-white shadow-[0_10px_24px_rgba(255,90,31,.28)] transition-colors hover:bg-accent-deep disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:bg-accent"
       >
         Get my picks
       </button>
+      {!canSubmit && (
+        <p className="mt-3 text-center text-xs/none text-fainter">
+          Still needed: {missing.join(", ")}.
+        </p>
+      )}
       {isMockApi && (
         <button
           type="button"
