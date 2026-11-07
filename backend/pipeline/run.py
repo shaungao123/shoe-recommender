@@ -105,7 +105,7 @@ def coverage_report(canonical, records, unmatched, ambiguous) -> str:
         )
         pct = 100 * filled / len(canonical) if canonical else 0
         lines.append(f"  {field_name:22} {filled:4}/{len(canonical)}  ({pct:3.0f}%)")
-    for container in ("metrics", "pros", "review_text", "image_urls"):
+    for container in ("metrics", "pros", "review_text"):
         filled = sum(1 for s in canonical if getattr(s, container))
         lines.append(f"  {container:22} {filled:4}/{len(canonical)}")
 

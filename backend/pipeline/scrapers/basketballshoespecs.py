@@ -107,10 +107,6 @@ class BasketballShoeSpecsScraper(BaseScraper):
         if band := specs.get("price band"):
             record.extras["price_band"] = band.lower()
 
-        hero = soup.select_one("main img[src]")
-        if hero is not None:
-            record.image_urls = [urljoin(self.base_url, hero["src"])]
-
         # "Build notes" is colorway/build trivia, not review prose.
         for heading in soup.find_all("h2"):
             if "build notes" in heading.get_text(strip=True).lower():

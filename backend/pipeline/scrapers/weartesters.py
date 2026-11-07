@@ -158,8 +158,4 @@ class WearTestersScraper(BaseScraper):
         if m := re.search(r"\b(low|mid|high)\b", record.model_raw, re.I):
             record.cut_height = map_cut_height(m.group(1))
 
-        og = soup.find("meta", property="og:image")
-        if og is not None and og.get("content"):
-            record.image_urls = [og["content"]]
-
         return record

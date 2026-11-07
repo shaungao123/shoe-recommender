@@ -51,7 +51,7 @@ class ShoeExtraMetadata(BaseModel):
     review_text: list[TextSnippet] = Field(default_factory=list)
     provenance: dict[str, dict[str, str]] = Field(default_factory=dict)
     sources: list[SourceRef] = Field(default_factory=list)
-    image_urls: list[str] = Field(default_factory=list)
+    image_search: dict[str, Any] | None = None
 
 
 class ShoeSummary(BaseModel):

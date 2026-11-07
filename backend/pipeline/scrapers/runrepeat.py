@@ -8,7 +8,7 @@ detail pages, which their robots.txt allows (only /search and filter query
 params are disallowed).
 
 Page anatomy (server-rendered Nuxt, no JS needed):
-* JSON-LD ``Product`` → name / brand / images
+* JSON-LD ``Product`` → name / brand
 * ``.corescore`` element → CoreScore (1–100)
 * a comparison table whose FIRST data column is this shoe's lab sheet
 * ~26 small "<shoe> vs Average" tables → numeric lab facts
@@ -193,11 +193,6 @@ class RunRepeatScraper(BaseScraper):
             model_raw=product.get("name", ""),
             brand=brand,
         )
-        images = product.get("image") or []
-        if isinstance(images, str):
-            images = [images]
-        record.image_urls = images[:1]  # variants of the same photo
-
         col = self._comparison_column(soup)
         if score := col.get("Our score"):
             if m := re.match(r"(\d{1,3})", score):

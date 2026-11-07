@@ -164,8 +164,4 @@ class TheHoopsGeekScraper(BaseScraper):
         record.pros = self._pros_cons(soup, "Pros")
         record.cons = self._pros_cons(soup, "Cons")
 
-        og = soup.find("meta", property="og:image")
-        if og is not None and og.get("content"):
-            record.image_urls = [og["content"]]
-
         return record

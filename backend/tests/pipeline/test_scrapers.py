@@ -40,7 +40,7 @@ def test_bss_parse_specs():
     assert record.position_tags == ["guard"]
     assert record.playstyle_tags == ["slasher", "shooter"]
     assert record.extras["price_band"] == "premium"
-    assert record.image_urls
+    assert not getattr(record, "image_urls", None)
 
 
 def test_bss_parse_signature():

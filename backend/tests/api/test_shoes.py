@@ -183,7 +183,7 @@ def test_get_shoe_detail_matches_db_shape(client, db_session):
     # Typed extra_metadata from the live corpus
     assert body["extra_metadata"]["pros"][0]["text"] == "elite grip"
     assert body["extra_metadata"]["metrics"]["runrepeat"]["corescore"] == 90
-    assert body["extra_metadata"]["image_urls"] == ["https://example.com/gt3.jpg"]
+    assert body["extra_metadata"].get("image_urls") in (None, [])
     assert body["extra_metadata"]["sources"][0]["source"] == "basketballshoespecs"
     assert body["playstyle_tags"] == ["slasher", "shooter"]
     assert body["width_fit"] == "standard"

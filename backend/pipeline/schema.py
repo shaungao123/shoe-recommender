@@ -90,7 +90,6 @@ class SourceRecord:
     pros: list[str] = field(default_factory=list)
     cons: list[str] = field(default_factory=list)
     review_text: list[str] = field(default_factory=list)  # prose segments
-    image_urls: list[str] = field(default_factory=list)
 
     # Anything source-specific that has no canonical slot (e.g. price band).
     extras: dict[str, Any] = field(default_factory=dict)
@@ -152,7 +151,6 @@ class CanonicalShoe:
     cons: list[dict[str, str]] = field(default_factory=list)
     review_text: list[dict[str, str]] = field(default_factory=list)
 
-    image_urls: list[str] = field(default_factory=list)
     affiliate_url: str | None = None  # populated by a later feed step
 
     # provenance[field_name] = Provenance of the winning value
