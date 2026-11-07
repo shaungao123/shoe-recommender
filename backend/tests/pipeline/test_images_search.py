@@ -17,10 +17,12 @@ from pipeline.images.search import (
     choose_downloadable_image,
     group_by_unique_name,
     has_prior_image_search,
+    normalize_for_match,
     parse_google_api_error,
     public_object_url,
     run_search,
     search_images,
+    select_hits_for_name,
 )
 from shared.db.models import Shoe
 
@@ -379,8 +381,9 @@ def test_process_shoe_uploads_by_canonical_id(session, monkeypatch):
         search_mod,
         "search_images",
         lambda *a, **k: [
-            SearchHit("first", "https://static.nike.com/sabrina.jpg"),
-            SearchHit("second", "https://static.nike.com/other.jpg"),
+            SearchHit("Nike Sabrina 3", "https://static.nike.com/sabrina3.jpg"),
+            SearchHit("Sabrina 2 EP", "https://static.nike.com/sabrina.jpg"),
+            SearchHit("Sabrina 2 colorways", "https://static.nike.com/other.jpg"),
         ],
     )
 
@@ -427,3 +430,74 @@ def test_process_shoe_uploads_by_canonical_id(session, monkeypatch):
     assert refreshed.extra_metadata["image_search"]["storage_path"] == (
         "shoe-images/nike-sabrina-2.jpg"
     )
+    assert [r["why"] for r in refreshed.extra_metadata["image_search"]["rejected"]] == [
+        "name_mismatch"
+    ]
+
+
+# -- name matching -----------------------------------------------------
+
+
+def test_normalize_for_match_splits_letters_and_digits():
+    assert normalize_for_match("AG5") == "ag 5"
+    assert normalize_for_match("ag-5") == "ag 5"
+    assert normalize_for_match("AG 5: Aaron Gordon’s") == "ag 5 aaron gordon s"
+
+
+def test_select_hits_drops_neighbouring_models_and_prefers_product_pages():
+    hits = [
+        SearchHit("AG 6: AG Ion", "https://x/ag6.png", "https://www.361usa.com/products/ag-6-ag-ion"),
+        SearchHit(
+            "Exciting News: The Launch of the Aaron Gordon Signature Shoe, the AG 5",
+            "https://x/blog.png",
+            "https://www.361usa.com/blogs/news/the-ag-5",
+        ),
+        SearchHit("AG 5 BASKETBALL SHOES – 361sport", "https://x/coll.jpg", "https://361sport.com/collections/ag-5"),
+        SearchHit("Untitled", "https://x/slug.png", "https://www.361usa.com/products/ag5-white"),
+        SearchHit("AG 55 retro", "https://x/ag55.png", "https://x/products/ag-55"),
+    ]
+    matching, rejected = select_hits_for_name(hits, "AG 5")
+    assert [h.link for h in matching] == [
+        "https://x/slug.png",
+        "https://x/coll.jpg",
+        "https://x/blog.png",
+    ]
+    assert [r.link for r in rejected] == ["https://x/ag6.png", "https://x/ag55.png"]
+    assert {r.why for r in rejected} == {"name_mismatch"}
+
+
+def test_process_shoe_misses_when_no_hit_names_the_shoe(session, monkeypatch):
+    from pipeline.images import search as search_mod
+
+    row = _shoe(
+        canonical_id="361-degrees-ag-5",
+        brand="361 Degrees",
+        name="AG 5",
+        image_url="https://proj.supabase.co/storage/v1/object/public/shoe-images/stale-ag-6.png",
+    )
+    session.add(row)
+    session.commit()
+    monkeypatch.setattr(
+        search_mod,
+        "search_images",
+        lambda *a, **k: [SearchHit("AG 6: AG Ion", "https://x/ag6.png")],
+    )
+    monkeypatch.setattr(
+        search_mod,
+        "choose_downloadable_image",
+        lambda *a, **k: (_ for _ in ()).throw(AssertionError("should not download")),
+    )
+
+    with httpx.Client() as client:
+        outcome = search_mod.process_shoe(
+            session,
+            client,
+            row,
+            search=SEARCH,
+            supabase_url="https://proj.supabase.co",
+            service_role_key="secret",
+        )
+
+    assert outcome == "missed"
+    assert row.image_url is None
+    assert row.extra_metadata["image_search"]["rejected"][0]["why"] == "name_mismatch"

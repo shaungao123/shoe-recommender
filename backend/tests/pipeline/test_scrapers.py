@@ -7,7 +7,7 @@ from tests.pipeline.conftest import FETCHED_AT, load_fixture
 from pipeline.scrapers.basketballshoespecs import BasketballShoeSpecsScraper
 from pipeline.scrapers.runrepeat import RunRepeatScraper
 from pipeline.scrapers.thehoopsgeek import TheHoopsGeekScraper
-from pipeline.scrapers.weartesters import WearTestersScraper
+from pipeline.scrapers.weartesters import WearTestersScraper, _clean_title
 
 
 # -- BasketballShoeSpecs -----------------------------------------------
@@ -123,6 +123,30 @@ def test_wt_list_records_category_tags(fake_fetcher):
     assert len(refs) > 20
     tagged = [u for u, tags in scraper._listing_tags.items() if "outdoor" in tags]
     assert tagged  # listing classes captured for parse()
+
+
+@pytest.mark.parametrize(
+    ("headline", "name"),
+    [
+        ("361 AG 5: Aaron Gordon’s New Shoe Feels Awesome", "361 AG 5"),
+        ("adidas Dame 4 Performance Review | Duke4005", "adidas Dame 4"),
+        ("Under Armour Curry 5 Performance Review – Duke4005", "Under Armour Curry 5"),
+        ("Air Jordan 12 ‘FIBA’ | Detailed Look and Review", "Air Jordan 12"),
+        ("Nike LeBron NXXT Gen Future “By JuJu”", "Nike LeBron NXXT Gen Future"),
+        ("Nike Zoom Freak 5 Review: The Best Freak Model Yet?", "Nike Zoom Freak 5"),
+        ("Nike Air Zoom GT Jump Review (Nikola Jokić’s shoe)", "Nike Air Zoom GT Jump"),
+        ("Nike Kyrie Infinity / Kyrie 8", "Nike Kyrie Infinity"),
+        ("Converse G4 Hi First Impressions", "Converse G4 Hi"),
+        ("Nike Kobe 8 System Re-", "Nike Kobe 8 System"),
+        ("Nike KD Trey 5 VII (7) | Detailed Look and Review", "Nike KD Trey 5 VII"),
+        ("Puma Legacy ’68 | Detailed Look and Review", "Puma Legacy ’68"),
+        ("Nike A’One: A’ja Wilson’s First Shoe With Nike is SOLID", "Nike A’One"),
+        ("Nike Kobe 3 Low Protro Performance Review", "Nike Kobe 3 Low Protro"),
+        ("Air Jordan 11 ‘Bred’ OG vs 2019 Retro Comparison", ""),
+    ],
+)
+def test_wt_clean_title_keeps_only_the_shoe_name(headline, name):
+    assert _clean_title(headline) == name
 
 
 def test_wt_parse_review_prose():

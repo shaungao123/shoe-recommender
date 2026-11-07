@@ -211,7 +211,7 @@ def list_filtered_shoes(
         cut=cut,
         width=width,
         position=position,
-    ).order_by(Shoe.price.desc(), Shoe.id)
+    ).order_by(Shoe.price.desc().nulls_last(), Shoe.id)
     if limit is not None:
         query = query.limit(limit)
     return list(session.scalars(query))

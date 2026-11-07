@@ -55,7 +55,7 @@ class RecommendedShoe(BaseModel):
     id: int
     brand: str
     model: str
-    price: float
+    price: float | None
     image_url: str | None = None
     affiliate_url: str | None = None
     specs: list[str] = Field(default_factory=list)

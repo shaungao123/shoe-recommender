@@ -43,7 +43,28 @@ _TAG_CLASSES = {
 
 
 def _clean_title(title: str) -> str:
-    return re.sub(r"\s*performance review\s*$|\s*review\s*$", "", title, flags=re.I).strip()
+    """Article headline → shoe name; empty string for multi-shoe comparison posts.
+
+    Headlines look like "Nike Sabrina 2: A Significant Improvement…",
+    "adidas Dame 4 Performance Review | Duke4005", "Air Jordan 12 ‘FIBA’ |
+    Detailed Look and Review" or "Kyrie Infinity / Kyrie 8".
+    """
+    name = re.split(r"\s+[|–—-]\s+", title)[0]  # reviewer / post-format suffix
+    if re.search(r"\bvs\.?\s", name, flags=re.I):
+        return ""
+    name = name.split(":")[0]  # tagline
+    name = re.split(r"\s+/\s+", name)[0]  # two shoes in one review: keep the first
+    # colorway nickname in curly quotes; a lone ’ is an apostrophe ("Legacy ’68", "A’One")
+    name = re.sub(r"\s*[‘“\"].*$", "", name)
+    name = re.sub(r"\s+(?:performance\s+)?(?:review\b.*|re-)$", "", name, flags=re.I)
+    name = re.sub(
+        r"\s+(?:first\s+impressions?|detailed\s+look(?:\s+and(?:\s+review)?)?)$",
+        "",
+        name,
+        flags=re.I,
+    )
+    name = re.sub(r"\s*\([^)]*\)$", "", name)  # "KD Trey 5 VII (7)"
+    return name.strip()
 
 
 class WearTestersScraper(BaseScraper):
@@ -87,12 +108,15 @@ class WearTestersScraper(BaseScraper):
         content = soup.select_one(".entry-content")
         if h1 is None or content is None:
             return None
+        model_raw = _clean_title(h1.get_text(" ", strip=True))
+        if not model_raw:
+            return None
 
         record = SourceRecord(
             source=self.name,
             url=url,
             fetched_at=fetched_at,
-            model_raw=_clean_title(h1.get_text(" ", strip=True)),
+            model_raw=model_raw,
         )
 
         text = re.sub(r"\s+", " ", content.get_text(" ", strip=True))

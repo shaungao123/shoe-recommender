@@ -21,11 +21,13 @@ from __future__ import annotations
 
 import argparse
 import logging
+import re
 import sys
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
+from urllib.parse import urlsplit
 
 import httpx
 from sqlalchemy import create_engine, select
@@ -50,6 +52,7 @@ SEARCH_TIMEOUT = 30.0
 class SearchHit:
     title: str
     link: str
+    context_link: str = ""
 
 
 @dataclass
@@ -204,8 +207,56 @@ def search_images(
         link = data.get("link")
         if not link:
             continue
-        hits.append(SearchHit(title=data.get("title") or "", link=link))
+        hits.append(
+            SearchHit(
+                title=data.get("title") or "",
+                link=link,
+                context_link=(data.get("image") or {}).get("contextLink") or "",
+            )
+        )
     return hits
+
+
+def normalize_for_match(text: str) -> str:
+    """Lowercase words; split letter/digit runs so "AG5", "ag-5", "AG 5" all become "ag 5"."""
+    text = re.sub(r"(?<=[a-zA-Z])(?=\d)|(?<=\d)(?=[a-zA-Z])", " ", text.lower())
+    return " ".join(re.findall(r"[a-z0-9]+", text))
+
+
+def hit_matches_name(hit: SearchHit, name: str) -> bool:
+    """True if the shoe name appears as a whole phrase in the hit's page title or page URL path.
+
+    Search ranking is loose ("AG 5" returns AG 6 pages first), so without this
+    the first downloadable image is often a neighbouring model.
+    """
+    phrase = normalize_for_match(name)
+    if not phrase:
+        return False
+    pattern = re.compile(rf"\b{re.escape(phrase)}\b")
+    haystacks = (hit.title, urlsplit(hit.context_link).path)
+    return any(pattern.search(normalize_for_match(h)) for h in haystacks)
+
+
+def _page_kind_rank(hit: SearchHit) -> int:
+    path = urlsplit(hit.context_link).path.lower()
+    if "/products/" in path or "/product/" in path:
+        return 0
+    if "/collections/" in path:
+        return 1
+    return 2
+
+
+def select_hits_for_name(
+    hits: list[SearchHit], name: str
+) -> tuple[list[SearchHit], list[CandidateNote]]:
+    """Hits whose page names this shoe (product pages first), plus notes for the rest."""
+    matching = [h for h in hits if hit_matches_name(h, name)]
+    rejected = [
+        CandidateNote(title=h.title, link=h.link, why="name_mismatch")
+        for h in hits
+        if not hit_matches_name(h, name)
+    ]
+    return sorted(matching, key=_page_kind_rank), rejected
 
 
 def download_image(client: httpx.Client, url: str) -> tuple[bytes, str] | None:
@@ -344,22 +395,25 @@ def process_shoe(
     """Search, upload, and update one shoe. Returns 'uploaded' | 'missed'."""
     assert row.canonical_id is not None
     query = f"{row.brand} {row.name} basketball shoe"
-    hits = search_images(client, search=search, query=query)
+    hits, mismatched = select_hits_for_name(
+        search_images(client, search=search, query=query), row.name or ""
+    )
     if not hits:
         meta = build_image_search_meta(
             query=query,
             publisher_url=None,
             storage_path=None,
             public_url=None,
-            rejected=[],
+            rejected=mismatched,
             miss=True,
         )
+        row.image_url = None
         row.extra_metadata = {**(row.extra_metadata or {}), "image_search": meta}
         return "missed"
 
     chosen = choose_downloadable_image(client, hits)
     if chosen is None:
-        rejected = [
+        rejected = mismatched + [
             CandidateNote(title=h.title, link=h.link, why="download_failed")
             for h in hits
         ]
@@ -371,6 +425,7 @@ def process_shoe(
             rejected=rejected,
             miss=True,
         )
+        row.image_url = None
         row.extra_metadata = {**(row.extra_metadata or {}), "image_search": meta}
         return "missed"
 
@@ -389,7 +444,7 @@ def process_shoe(
         publisher_url=chosen.publisher_url,
         storage_path=f"{BUCKET}/{object_path}",
         public_url=public_url,
-        rejected=chosen.rejected,
+        rejected=mismatched + chosen.rejected,
         miss=False,
     )
     row.image_url = public_url

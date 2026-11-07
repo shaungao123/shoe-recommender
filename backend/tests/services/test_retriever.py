@@ -85,6 +85,17 @@ def test_fallback_null_budget_includes_all_prices(db_session) -> None:
     assert "Cheap" in names
 
 
+def test_fallback_maps_unknown_price_to_none(db_session) -> None:
+    shoe = make_shoe("Unpriced", "0", ["slasher"])
+    shoe.price = None
+    db_session.add(shoe)
+    db_session.flush()
+
+    candidates = retriever.retrieve_fallback(db_session, playstyle="slasher", budget=None)
+
+    assert [(c.name, c.price) for c in candidates] == [("Unpriced", None)]
+
+
 def test_fallback_respects_hard_filters(db_session) -> None:
     db_session.add_all(
         [

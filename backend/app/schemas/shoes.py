@@ -63,7 +63,7 @@ class ShoeSummary(BaseModel):
     canonical_id: str | None = None
     brand: str
     name: str
-    price: float
+    price: float | None
     currency: str
     image_url: str | None = None
     affiliate_url: str | None = None

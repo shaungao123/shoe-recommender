@@ -145,9 +145,8 @@ def _build_user_prompt(
         "",
     ]
     for index, candidate in enumerate(candidates, start=1):
-        lines.append(
-            f"[{index}] {candidate.brand} {candidate.name} — ${candidate.price:g}"
-        )
+        price = f"${candidate.price:g}" if candidate.price is not None else "price unknown"
+        lines.append(f"[{index}] {candidate.brand} {candidate.name} — {price}")
         lines.append(f"Specs JSON: {json.dumps(candidate.specs or {}, sort_keys=True)}")
         if candidate.similarity is not None:
             lines.append(f"Similarity: {candidate.similarity:.2f}")

@@ -31,7 +31,7 @@ def _summary_from_row(row: Shoe) -> ShoeSummary:
         canonical_id=row.canonical_id,
         brand=row.brand,
         name=row.name,
-        price=float(row.price),
+        price=float(row.price) if row.price is not None else None,
         currency=row.currency,
         image_url=row.image_url,
         affiliate_url=row.affiliate_url,
