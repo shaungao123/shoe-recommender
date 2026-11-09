@@ -38,6 +38,7 @@ def _to_recommendation(candidate: Candidate, *, playstyle: str) -> RecommendedSh
             if _shorten(snippet.text)
         ],
         similarity=candidate.similarity,
+        match_reasons=candidate.match_reasons,
     )
 
 

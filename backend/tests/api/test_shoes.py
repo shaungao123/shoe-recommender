@@ -217,6 +217,40 @@ def test_catalog_newest_uses_release_year_not_import_time(client, db_session):
     assert _catalog_names(client, sort="newest") == ["New", "Old", "Unknown"]
 
 
+def _hoops_geek(**ratings):
+    return {"metrics": {"thehoopsgeek": ratings}}
+
+
+def test_catalog_returns_single_source_scores(client, db_session):
+    seed_shoe(
+        db_session,
+        extra_metadata=_hoops_geek(overall=8.3, traction=9.0, outdoor="50%", expert_review_count=2),
+    )
+    seed_shoe(
+        db_session,
+        canonical_id="other",
+        name="Lab Only",
+        extra_metadata={"metrics": {"runrepeat": {"corescore": 90}}},
+    )
+
+    items = {i["name"]: i for i in client.get("/api/shoes").json()["items"]}
+
+    scores = items["G.T. Cut 3"]["scores"]
+    assert scores["source"] == "thehoopsgeek"
+    assert (scores["overall"], scores["traction"], scores["outdoor_pct"]) == (8.3, 9.0, 50)
+    assert items["Lab Only"]["scores"] is None
+
+
+def test_catalog_score_sort_ranks_rated_shoes_first(client, db_session):
+    seed_shoe(db_session, canonical_id="a", name="Unrated", extra_metadata={"metrics": {}})
+    seed_shoe(db_session, canonical_id="b", name="Grippy", extra_metadata=_hoops_geek(traction=9.5, outdoor="9%"))
+    seed_shoe(db_session, canonical_id="c", name="Tough", extra_metadata=_hoops_geek(traction=7.0, outdoor="80%"))
+
+    assert _catalog_names(client, sort="score_traction") == ["Grippy", "Tough", "Unrated"]
+    # Numeric, not text: "80%" must outrank "9%".
+    assert _catalog_names(client, sort="score_outdoor") == ["Tough", "Grippy", "Unrated"]
+
+
 def test_catalog_rejects_unknown_sort(client):
     res = client.get("/api/shoes", params={"sort": "popular"})
     assert res.status_code == 422

@@ -166,4 +166,5 @@ def _shoe_to_candidate(shoe: Shoe, *, tag_overlap: int | None = None) -> Candida
         affiliate_url=shoe.affiliate_url,
         specs=shoe.specs or {},
         tag_overlap=tag_overlap,
+        metrics=(shoe.extra_metadata or {}).get("metrics") or {},
     )

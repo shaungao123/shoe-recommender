@@ -10,7 +10,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-from sqlalchemy import String, cast, func, select
+from sqlalchemy import Float, String, cast, func, select
 from sqlalchemy.orm import Session
 
 from shared.db.models import Embedding, Shoe
@@ -25,6 +25,11 @@ OVERFETCH_FACTOR = 4
 # Catalog search ignores punctuation, so "gt cut" finds "G.T. Cut 3".
 _SEARCH_FOLD_PAIRS = ((".", ""), ("'", ""), ("’", ""), ("-", " "))
 _SEARCH_FOLD = str.maketrans(dict(_SEARCH_FOLD_PAIRS))
+
+# Scores are never averaged across sources, so ranking uses a single reviewer:
+# the only one that rates most of the corpus on one consistent scale.
+SCORE_SOURCE = "thehoopsgeek"
+SCORE_METRICS = ("overall", "traction", "cushion", "support", "fit", "outdoor")
 
 
 @dataclass
@@ -55,6 +60,13 @@ def _json_array_contains(shoe_col, key: str, value: str):
     the serialized array. Fine for a small shoe corpus.
     """
     return cast(shoe_col[key], String).like(f'%"{value}"%')
+
+
+def _score_value(metric: str):
+    value = Shoe.extra_metadata["metrics"][SCORE_SOURCE][metric]
+    if metric == "outdoor":  # stored as "50%"
+        return cast(func.replace(value.as_string(), "%", ""), Float)
+    return value.as_float()
 
 
 def _searchable_text():
@@ -142,6 +154,14 @@ def list_shoes(
             Shoe.name.asc(),
             Shoe.id,
         ),
+        **{
+            f"score_{metric}": (
+                _score_value(metric).desc().nulls_last(),
+                Shoe.name.asc(),
+                Shoe.id,
+            )
+            for metric in SCORE_METRICS
+        },
     }[sort]
     rows = list(
         session.scalars(

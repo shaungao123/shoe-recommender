@@ -16,12 +16,35 @@ from app.schemas.shoes import (
     ShoeDetail,
     ShoeExtraMetadata,
     ShoeListResponse,
+    ShoeScores,
     ShoeSpecs,
     ShoeSummary,
 )
 from shared.db.models import Shoe
 
 router = APIRouter(prefix="/shoes", tags=["shoes"])
+
+
+def _scores_from_row(row: Shoe) -> ShoeScores | None:
+    metrics = (row.extra_metadata or {}).get("metrics") or {}
+    ratings = metrics.get(shoes_repo.SCORE_SOURCE)
+    if not ratings:
+        return None
+    try:
+        outdoor_pct = int(str(ratings.get("outdoor")).rstrip("%"))
+    except ValueError:
+        outdoor_pct = None
+    return ShoeScores(
+        source=shoes_repo.SCORE_SOURCE,
+        overall=ratings.get("overall"),
+        traction=ratings.get("traction"),
+        cushion=ratings.get("cushion"),
+        support=ratings.get("support"),
+        fit=ratings.get("fit"),
+        materials=ratings.get("materials"),
+        outdoor_pct=outdoor_pct,
+        expert_review_count=ratings.get("expert_review_count"),
+    )
 
 
 def _summary_from_row(row: Shoe) -> ShoeSummary:
@@ -44,6 +67,7 @@ def _summary_from_row(row: Shoe) -> ShoeSummary:
         cushioning_tech=specs.get("cushioning_tech"),
         position_tags=list(specs.get("position_tags") or []),
         playstyle_tags=list(specs.get("playstyle_tags") or []),
+        scores=_scores_from_row(row),
     )
 
 
@@ -81,7 +105,10 @@ def list_shoes(
         None, description="Must appear in specs.position_tags: guard | wing | big"
     ),
     search: str | None = Query(None, min_length=1, max_length=128),
-    sort: str = Query("price_asc", pattern="^(price_asc|price_desc|newest)$"),
+    sort: str = Query(
+        "price_asc",
+        pattern="^(price_asc|price_desc|newest|score_(overall|traction|cushion|support|fit|outdoor))$",
+    ),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> ShoeListResponse:
