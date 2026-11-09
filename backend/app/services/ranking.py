@@ -12,13 +12,13 @@ from app.db.repositories.shoes import SCORE_SOURCE
 from app.schemas.candidate import Candidate
 from app.schemas.recommend import RecommendRequest
 
-# Similarity usually spans ~0.1-0.2 across a candidate pool, so these are sized
-# to reorder close matches without letting one answer override a poor fit.
-COURT_WEIGHT = 0.12
-PRIORITY_WEIGHT = 0.12
-WIDTH_WEIGHT = 0.08
-BRAND_WEIGHT = 0.08
-CUT_WEIGHT = 0.06
+# Similarity spans only ~0.05-0.11 across a real candidate pool, so anything
+# larger than these turns a preference into a filter. Tuned with backend/eval.
+COURT_WEIGHT = 0.06
+PRIORITY_WEIGHT = 0.06
+WIDTH_WEIGHT = 0.03
+BRAND_WEIGHT = 0.03
+CUT_WEIGHT = 0.02
 UNPRICED_PENALTY = 0.03
 TAG_OVERLAP_WEIGHT = 0.1
 
