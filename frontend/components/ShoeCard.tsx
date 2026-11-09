@@ -1,7 +1,9 @@
 "use client";
 
+import Link from "next/link";
 import { useState } from "react";
 
+import { isMockApi } from "@/lib/api";
 import type { FeedbackReason, FeedbackVote, RecommendedShoe } from "@/lib/types";
 
 interface ShoeCardProps {
@@ -54,7 +56,7 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
         <img
           src={shoe.image_url}
           alt={`${shoe.brand} ${shoe.model}`}
-          className="h-[260px] w-full bg-paper object-cover"
+          className="h-[260px] w-full bg-white object-contain p-4"
         />
       ) : (
         <div className="flex h-[260px] flex-col items-center justify-center gap-2.5 bg-ink">
@@ -79,6 +81,19 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
             {formatPrice(shoe.price)}
           </div>
         </div>
+
+        {shoe.match_reasons && shoe.match_reasons.length > 0 && (
+          <ul aria-label="Why this shoe matched" className="mb-2.5 flex flex-wrap gap-[7px]">
+            {shoe.match_reasons.map((reason) => (
+              <li
+                key={reason}
+                className="rounded-full bg-accent/10 px-2.5 py-1.5 text-[11px]/none font-bold text-accent-deep"
+              >
+                {reason}
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="mb-4 flex flex-wrap gap-[7px]">
           {shoe.specs.map((spec) => (
@@ -116,6 +131,17 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
               ))}
             </div>
           </details>
+        )}
+
+        {!isMockApi && (
+          // New tab: leaving this page would lose the user's results.
+          <Link
+            href={`/catalog/${shoe.id}`}
+            target="_blank"
+            className="mb-4 text-[13px]/none font-bold text-ink underline underline-offset-4 hover:text-accent-deep"
+          >
+            See full scores and specs
+          </Link>
         )}
 
         <div className="mb-3.5">

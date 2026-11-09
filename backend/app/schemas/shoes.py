@@ -54,6 +54,20 @@ class ShoeExtraMetadata(BaseModel):
     image_search: dict[str, Any] | None = None
 
 
+class ShoeScores(BaseModel):
+    """One reviewer's ratings, never blended with another source's scale."""
+
+    source: str
+    overall: float | None = None  # 0-10, as are the ratings below
+    traction: float | None = None
+    cushion: float | None = None
+    support: float | None = None
+    fit: float | None = None
+    materials: float | None = None
+    outdoor_pct: int | None = None  # 0-100
+    expert_review_count: int | None = None
+
+
 class ShoeSummary(BaseModel):
     """Browse card — columns + well-filled spec fields from the corpus."""
 
@@ -77,6 +91,7 @@ class ShoeSummary(BaseModel):
     cushioning_tech: str | None = None
     position_tags: list[str] = Field(default_factory=list)
     playstyle_tags: list[str] = Field(default_factory=list)
+    scores: ShoeScores | None = None
 
 
 class ShoeDetail(ShoeSummary):

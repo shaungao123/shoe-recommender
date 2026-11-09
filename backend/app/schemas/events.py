@@ -5,7 +5,7 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 EventName = Literal[
-    "quiz_started", "quiz_submitted", "recommendations_shown", "recommendations_empty",
+    "quiz_started", "quiz_step_completed", "quiz_submitted", "recommendations_shown", "recommendations_empty",
     "catalog_viewed", "catalog_filtered", "shoe_detail_viewed", "buy_link_clicked",
     "buy_link_unavailable", "feedback_submitted", "api_recoverable_failure", "api_failure",
     "recommendation_viewed", "buy_link_intent", "recommendation_error",

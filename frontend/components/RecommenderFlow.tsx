@@ -5,7 +5,16 @@ import Link from "next/link";
 
 import { ErrorScreen } from "@/components/screens/ErrorScreen";
 import { HomeScreen } from "@/components/screens/HomeScreen";
-import { IntakeScreen, type IntakeState } from "@/components/screens/IntakeScreen";
+import {
+  answerSummary,
+  budgetValue,
+  EMPTY_INTAKE,
+  furthestStep,
+  IntakeScreen,
+  knownAnswers,
+  stepName,
+  type IntakeState,
+} from "@/components/screens/IntakeScreen";
 import { LoadingScreen } from "@/components/screens/LoadingScreen";
 import { NoResultsScreen } from "@/components/screens/NoResultsScreen";
 import { ResultsScreen } from "@/components/screens/ResultsScreen";
@@ -13,7 +22,6 @@ import { getRecommendations, sendFeedback, trackEvent } from "@/lib/api";
 import { MOCK_LATENCY_MS } from "@/lib/mockData";
 import { getAnonymousSessionId } from "@/lib/session";
 import type {
-  AestheticPreferences,
   FeedbackReason,
   FeedbackVote,
   RecommendRequest,
@@ -22,60 +30,34 @@ import type {
 
 type Screen = "home" | "intake" | "loading" | "error" | "no-results" | "results";
 
-const EMPTY_AESTHETIC_PREFERENCES: AestheticPreferences = {
-  brand: null,
-  color_family: null,
-  visual_direction: null,
-  silhouette: null,
-};
-
-const EMPTY_INTAKE: IntakeState = {
-  position: null,
-  styles: [],
-  freeText: "",
-  budget: null,
-  aesthetic: "",
-  aestheticPreferences: EMPTY_AESTHETIC_PREFERENCES,
-};
-
-/** Map the "$180+" chip to no cap; the others to their dollar value. */
-function parseBudget(label: string | null): number | null {
-  if (!label || label.endsWith("+")) return null;
-  return Number(label.replace(/\D/g, ""));
-}
-
 function buildRequest(intake: IntakeState): RecommendRequest {
   const playstyleParts = [
-    intake.position,
-    intake.styles.join(", "),
+    knownAnswers(intake.positions).join(", "),
+    knownAnswers(intake.styles).join(", "),
     intake.freeText.trim(),
+    intake.note.trim(),
   ].filter(Boolean);
   return {
     playstyle: playstyleParts.join(" — "),
-    budget: parseBudget(intake.budget),
-    aesthetic: intake.aesthetic.trim() || null,
-    aesthetic_preferences: intake.aestheticPreferences,
+    budget: budgetValue(intake.budget),
+    aesthetic: null,
+    court: intake.court,
+    priorities: intake.priorities,
+    foot_width: intake.footWidth,
+    preferred_brand: intake.brand,
+    preferred_cut: intake.cut,
   };
-}
-
-function hasMeaningfulIntake(intake: IntakeState): boolean {
-  return Boolean(
-    intake.position ||
-      intake.styles.length ||
-      intake.freeText.trim() ||
-      intake.budget,
-  );
 }
 
 export function RecommenderFlow() {
   const [screen, setScreen] = useState<Screen>("home");
+  const [step, setStep] = useState(0);
   const [intake, setIntake] = useState<IntakeState>(EMPTY_INTAKE);
   const [stage, setStage] = useState(0);
   const [shoes, setShoes] = useState<RecommendedShoe[]>([]);
   const [feedback, setFeedback] = useState<Record<number, FeedbackVote | null>>(
     {},
   );
-  const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
   const timersRef = useRef<number[]>([]);
   const requestSeq = useRef(0);
@@ -87,10 +69,30 @@ export function RecommenderFlow() {
 
   useEffect(() => clearTimers, [clearTimers]);
 
+  /** Moves to a screen as a browser history entry, so Back retraces the quiz. */
+  const navigate = useCallback((nextScreen: Screen, nextStep = 0) => {
+    window.history.pushState({ screen: nextScreen, step: nextStep }, "");
+    setScreen(nextScreen);
+    setStep(nextStep);
+    window.scrollTo(0, 0);
+  }, []);
+
+  useEffect(() => {
+    const restore = (event: PopStateEvent) => {
+      requestSeq.current++; // abandon any in-flight request
+      clearTimers();
+      setScreen(event.state?.screen ?? "home");
+      setStep(event.state?.step ?? 0);
+    };
+    window.addEventListener("popstate", restore);
+    return () => window.removeEventListener("popstate", restore);
+  }, [clearTimers]);
+
   const logEvent = useCallback(
     (
       name:
         | "quiz_started"
+        | "quiz_step_completed"
         | "quiz_submitted"
         | "recommendations_shown"
         | "recommendation_viewed"
@@ -106,26 +108,17 @@ export function RecommenderFlow() {
 
   const runRequest = useCallback(
     async (simulateFailure = false) => {
-      if (!hasMeaningfulIntake(intake)) {
-        setValidationMessage(
-          "Pick a position or style, describe your game, or set a budget first.",
-        );
-        return;
-      }
-      setValidationMessage(null);
       const seq = ++requestSeq.current;
       const request = buildRequest(intake);
       const startedAt = Date.now();
       logEvent("quiz_submitted", {
-        has_position: Boolean(intake.position),
-        style_count: intake.styles.length,
+        position_count: knownAnswers(intake.positions).length,
+        style_count: knownAnswers(intake.styles).length,
+        court: intake.court,
+        priority_count: intake.priorities.length,
         has_budget: Boolean(intake.budget),
-        has_aesthetic_preference: Boolean(
-          intake.aesthetic.trim() ||
-            intake.aestheticPreferences.brand ||
-            intake.aestheticPreferences.color_family ||
-            intake.aestheticPreferences.visual_direction ||
-            intake.aestheticPreferences.silhouette,
+        has_extras: Boolean(
+          intake.footWidth || intake.brand || intake.cut || intake.note.trim(),
         ),
       });
       setScreen("loading");
@@ -154,7 +147,7 @@ export function RecommenderFlow() {
             result_count: 0,
             duration_ms: Date.now() - startedAt,
           });
-          setScreen("no-results");
+          navigate("no-results");
           return;
         }
         logEvent("recommendations_shown", {
@@ -167,7 +160,7 @@ export function RecommenderFlow() {
             rank: index + 1,
           }),
         );
-        setScreen("results");
+        navigate("results");
       } catch {
         if (seq !== requestSeq.current) return;
         clearTimers();
@@ -175,10 +168,10 @@ export function RecommenderFlow() {
           duration_ms: Date.now() - startedAt,
           simulated: simulateFailure,
         });
-        setScreen("error");
+        navigate("error");
       }
     },
-    [clearTimers, intake, logEvent],
+    [clearTimers, intake, logEvent, navigate],
   );
 
   const startOver = useCallback(() => {
@@ -188,9 +181,8 @@ export function RecommenderFlow() {
     setStage(0);
     setShoes([]);
     setFeedback({});
-    setValidationMessage(null);
-    setScreen("home");
-  }, [clearTimers]);
+    navigate("home");
+  }, [clearTimers, navigate]);
 
   const vote = useCallback(
     (
@@ -217,6 +209,11 @@ export function RecommenderFlow() {
     [intake, logEvent],
   );
 
+  // History can outlive React state after a refresh: never show an entry whose
+  // data is gone, or a step whose earlier required answers are missing.
+  const visibleScreen = screen === "results" && shoes.length === 0 ? "home" : screen;
+  const visibleStep = Math.min(step, furthestStep(intake));
+
   return (
     <div className="flex min-h-screen flex-col items-center px-6 pb-20">
       <header className="flex w-full max-w-[1080px] items-center justify-between px-1 pt-7 pb-2">
@@ -234,7 +231,7 @@ export function RecommenderFlow() {
           >
             Browse catalog
           </Link>
-          {screen === "results" && (
+          {visibleScreen === "results" && (
             <button
               type="button"
               onClick={startOver}
@@ -246,32 +243,43 @@ export function RecommenderFlow() {
         </div>
       </header>
 
-      {screen === "home" && (
+      {visibleScreen === "home" && (
         <HomeScreen
           onStart={() => {
             logEvent("quiz_started");
-            setScreen("intake");
+            navigate("intake", 0);
           }}
         />
       )}
-      {screen === "intake" && (
+      {visibleScreen === "intake" && (
         <IntakeScreen
           intake={intake}
           onChange={setIntake}
+          step={visibleStep}
+          editing={shoes.length > 0}
+          onBack={() => navigate("intake", visibleStep - 1)}
+          onNext={() => {
+            logEvent("quiz_step_completed", {
+              step: visibleStep + 1,
+              step_name: stepName(visibleStep),
+            });
+            navigate("intake", visibleStep + 1);
+          }}
           onSubmit={() => runRequest()}
           onSimulateError={() => runRequest(true)}
-          validationMessage={validationMessage}
         />
       )}
-      {screen === "loading" && <LoadingScreen stage={stage} />}
-      {screen === "error" && (
+      {visibleScreen === "loading" && <LoadingScreen stage={stage} />}
+      {visibleScreen === "error" && (
         <ErrorScreen onRetry={() => runRequest()} onStartOver={startOver} />
       )}
-      {screen === "no-results" && (
-        <NoResultsScreen onAdjust={() => setScreen("intake")} />
+      {visibleScreen === "no-results" && (
+        <NoResultsScreen onAdjust={() => navigate("intake", 3)} />
       )}
-      {screen === "results" && (
+      {visibleScreen === "results" && (
         <ResultsScreen
+          answers={answerSummary(intake)}
+          onEditStep={(editStep) => navigate("intake", editStep)}
           shoes={shoes}
           feedback={feedback}
           onVote={vote}

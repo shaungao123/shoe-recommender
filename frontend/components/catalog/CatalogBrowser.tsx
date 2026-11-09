@@ -4,7 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CatalogCard } from "@/components/catalog/CatalogCard";
-import { catalogFiltersFromUrl, catalogUrlQuery, EMPTY_CATALOG_FILTERS, getCatalog, type CatalogFilters, type CatalogShoe } from "@/lib/catalog";
+import { CATALOG_SORT_OPTIONS, catalogFiltersFromUrl, catalogUrlQuery, EMPTY_CATALOG_FILTERS, getCatalog, rememberCatalogView, type CatalogFilters, type CatalogShoe } from "@/lib/catalog";
 import { trackEvent } from "@/lib/api";
 import { getAnonymousSessionId } from "@/lib/session";
 
@@ -20,7 +20,7 @@ const OPTIONS = {
   width: ["narrow", "standard", "wide"],
 };
 
-const label = (value: string) => value.replaceAll("-", " ");
+const label = (value: string) => (value === "bad" ? "not recommended" : value.replaceAll("-", " "));
 
 function SelectFilter({ title, value, options, onChange }: { title: string; value: string; options: string[]; onChange: (value: string) => void }) {
   return <label className="block text-xs font-bold tracking-[.05em] text-muted uppercase"><span className="mb-2 block">{title}</span><select value={value} onChange={(event) => onChange(event.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium text-ink normal-case outline-none focus:border-ink"><option value="">Any</option>{options.map((option) => <option key={option} value={option}>{label(option)}</option>)}</select></label>;
@@ -82,6 +82,7 @@ export function CatalogBrowser() {
   useEffect(() => {
     const query = catalogUrlQuery(filters, shoes.length, PAGE_SIZE);
     window.history.replaceState(null, "", query ? `?${query}` : window.location.pathname);
+    rememberCatalogView(query);
   }, [filters, shoes.length]);
   useEffect(() => {
     if (!hasTrackedView.current) {
@@ -113,11 +114,11 @@ export function CatalogBrowser() {
     <div className="mb-8 grid gap-4 rounded-2xl border border-line bg-[#eeece6] p-4 sm:grid-cols-2 lg:grid-cols-4">
       <label className="sm:col-span-2 lg:col-span-2 text-xs font-bold tracking-[.05em] text-muted uppercase"><span className="mb-2 block">Search</span><input value={searchText} onChange={(event) => setSearchText(event.target.value)} placeholder="Shoe name or brand" className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium normal-case outline-none focus:border-ink" /></label>
       <label className="block text-xs font-bold tracking-[.05em] text-muted uppercase"><span className="mb-2 block">Maximum price</span><input type="number" min="0" value={filters.budgetMax} onChange={(event) => update("budgetMax", event.target.value)} placeholder="Any price" className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium normal-case outline-none focus:border-ink" /></label>
-      <label className="block text-xs font-bold tracking-[.05em] text-muted uppercase"><span className="mb-2 block">Sort</span><select value={filters.sort} onChange={(event) => update("sort", event.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium normal-case outline-none focus:border-ink"><option value="newest">Newest</option><option value="price_asc">Price: low to high</option><option value="price_desc">Price: high to low</option></select></label>
+      <label className="block text-xs font-bold tracking-[.05em] text-muted uppercase"><span className="mb-2 block">Sort</span><select value={filters.sort} onChange={(event) => update("sort", event.target.value)} className="w-full rounded-xl border border-line bg-white px-3 py-2.5 text-sm font-medium normal-case outline-none focus:border-ink">{CATALOG_SORT_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
       <SelectFilter title="Brand" value={filters.brand} options={OPTIONS.brand} onChange={(value) => update("brand", value)} />
       <SelectFilter title="Position" value={filters.position} options={OPTIONS.position} onChange={(value) => update("position", value)} />
       <SelectFilter title="Playstyle" value={filters.playstyle} options={OPTIONS.playstyle} onChange={(value) => update("playstyle", value)} />
-      <SelectFilter title="Indoor / outdoor" value={filters.outdoor} options={OPTIONS.outdoor} onChange={(value) => update("outdoor", value)} />
+      <SelectFilter title="Outdoor use" value={filters.outdoor} options={OPTIONS.outdoor} onChange={(value) => update("outdoor", value)} />
       <SelectFilter title="Cut" value={filters.cut} options={OPTIONS.cut} onChange={(value) => update("cut", value)} />
       <SelectFilter title="Width" value={filters.width} options={OPTIONS.width} onChange={(value) => update("width", value)} />
     </div>

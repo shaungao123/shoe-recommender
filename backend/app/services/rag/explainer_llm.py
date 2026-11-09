@@ -128,6 +128,7 @@ def explain(
                 if _shorten_evidence(snippet.text)
             ],
             similarity=candidate.similarity,
+            match_reasons=candidate.match_reasons,
         )
         for candidate, card in zip(candidates, batch.cards, strict=True)
     ]

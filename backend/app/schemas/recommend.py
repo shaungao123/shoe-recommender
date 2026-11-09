@@ -5,38 +5,10 @@ from typing import Literal
 from pydantic import BaseModel, Field, model_validator
 
 
-class AestheticPreferences(BaseModel):
-    """Soft visual preferences; corpus gaps must never turn these into exclusions."""
-
-    preferred_brand: str | None = Field(default=None, max_length=128)
-    color_family: Literal["neutral", "dark", "bright", "team"] | None = None
-    visual_direction: Literal["classic_retro", "modern_technical", "minimal"] | None = None
-    silhouette: Literal["low", "mid", "high"] | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def accept_ui_field_names(cls, value: object) -> object:
-        if not isinstance(value, dict):
-            return value
-        normalized = dict(value)
-        if "preferred_brand" not in normalized and "brand" in normalized:
-            normalized["preferred_brand"] = normalized["brand"]
-        if normalized.get("color_family") == "team_colors":
-            normalized["color_family"] = "team"
-        return normalized
-
-    def query_terms(self) -> str:
-        labels = {
-            "classic_retro": "classic retro",
-            "modern_technical": "modern technical",
-        }
-        values = [
-            self.preferred_brand,
-            self.color_family,
-            labels.get(self.visual_direction or "", self.visual_direction),
-            self.silhouette and f"{self.silhouette} cut",
-        ]
-        return " ".join(str(value) for value in values if value)
+Court = Literal["indoor", "outdoor", "both"]
+Priority = Literal["traction", "cushion", "support", "lightweight"]
+FootWidth = Literal["narrow", "standard", "wide"]
+Cut = Literal["low", "mid", "high"]
 
 
 class EvidenceSnippet(BaseModel):
@@ -52,7 +24,12 @@ class RecommendRequest(BaseModel):
         None, ge=0, description="Max price; null means no cap ($180+)"
     )
     aesthetic: str | None = Field(None, description="Optional style / look free text")
-    aesthetic_preferences: AestheticPreferences | None = None
+    # Quiz answers. These reorder results; only budget and the filters below exclude shoes.
+    court: Court | None = None
+    priorities: list[Priority] = Field(default_factory=list, max_length=2)
+    foot_width: FootWidth | None = None
+    preferred_brand: str | None = Field(default=None, max_length=128)
+    preferred_cut: Cut | None = None
     brand: str | None = None
     outdoor: str | None = Field(
         None, description="specs.outdoor_suitability: good | fair | bad"
@@ -75,10 +52,15 @@ class RecommendRequest(BaseModel):
             return self
         if (self.playstyle or "").strip():
             return self
-        if (self.aesthetic or "").strip() or self.aesthetic_preferences is not None:
+        if (self.aesthetic or "").strip():
             return self
         if any(
             (
+                self.court,
+                self.priorities,
+                self.foot_width,
+                self.preferred_brand,
+                self.preferred_cut,
                 self.brand,
                 self.outdoor,
                 self.cut,
@@ -104,6 +86,7 @@ class RecommendedShoe(BaseModel):
     explanation: str
     evidence: list[EvidenceSnippet] = Field(default_factory=list)
     similarity: float | None = None
+    match_reasons: list[str] = Field(default_factory=list)
 
 
 class RecommendResponse(BaseModel):

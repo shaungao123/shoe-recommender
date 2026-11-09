@@ -9,22 +9,21 @@ export interface RecommendRequest {
   playstyle: string;
   /** Max price in USD; null means no cap. */
   budget: number | null;
-  /** Optional free-text look/colorway preference. */
+  /** Optional free-text look preference; the quiz no longer asks for one. */
   aesthetic: string | null;
-  /** Preference signals only — the API must not exclude strong matches for these. */
-  aesthetic_preferences?: AestheticPreferences | null;
+  /** The fields below reorder results; they never exclude shoes. */
+  court: Court | null;
+  /** At most two. */
+  priorities: Priority[];
+  foot_width: FootWidth | null;
+  preferred_brand: string | null;
+  preferred_cut: Cut | null;
 }
 
-export type ColorFamily = "neutral" | "dark" | "bright" | "team_colors";
-export type VisualDirection = "classic_retro" | "modern_technical" | "minimal";
-export type SilhouettePreference = "low" | "mid" | "high";
-
-export interface AestheticPreferences {
-  brand: string | null;
-  color_family: ColorFamily | null;
-  visual_direction: VisualDirection | null;
-  silhouette: SilhouettePreference | null;
-}
+export type Court = "indoor" | "outdoor" | "both";
+export type Priority = "traction" | "cushion" | "support" | "lightweight";
+export type FootWidth = "narrow" | "standard" | "wide";
+export type Cut = "low" | "mid" | "high";
 
 /** A short, source-attributed excerpt supporting a recommendation. */
 export interface EvidenceExcerpt {
@@ -47,6 +46,8 @@ export interface RecommendedShoe {
   evidence?: EvidenceExcerpt[];
   /** Affiliate-tracked buy link; null until affiliate feeds exist. */
   affiliate_url: string | null;
+  /** Short factual reasons this shoe fits the shopper's answers, e.g. "9.3 traction". */
+  match_reasons?: string[];
 }
 
 export interface RecommendResponse {
@@ -76,6 +77,7 @@ export interface ProductEvent {
   session_id: string;
   name:
     | "quiz_started"
+    | "quiz_step_completed"
     | "quiz_submitted"
     | "recommendations_shown"
     | "recommendation_viewed"
