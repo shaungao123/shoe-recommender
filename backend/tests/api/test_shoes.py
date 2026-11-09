@@ -1,6 +1,7 @@
 """API tests for GET /api/shoes and GET /api/shoes/{id}."""
 
 from decimal import Decimal
+from datetime import datetime, timezone
 
 from tests.conftest import seed_shoe
 
@@ -162,6 +163,63 @@ def test_list_pagination(client, db_session):
     assert body["offset"] == 2
     assert len(body["items"]) == 2
     assert [i["name"] for i in body["items"]] == ["Shoe 2", "Shoe 3"]
+
+
+def test_catalog_search_and_newest_sort(client, db_session):
+    seed_shoe(db_session, name="Court Vision", created_at=datetime(2025, 1, 1, tzinfo=timezone.utc))
+    seed_shoe(
+        db_session,
+        canonical_id="adidas-court-2026",
+        brand="Adidas",
+        name="Court Vision Pro",
+        price=Decimal("150.00"),
+        created_at=datetime(2026, 1, 1, tzinfo=timezone.utc),
+    )
+
+    res = client.get("/api/shoes", params={"search": "court", "sort": "newest"})
+    assert res.status_code == 200
+    assert [item["name"] for item in res.json()["items"]] == [
+        "Court Vision Pro", "Court Vision"
+    ]
+
+
+def _catalog_names(client, **params):
+    res = client.get("/api/shoes", params=params)
+    assert res.status_code == 200
+    return [item["name"] for item in res.json()["items"]]
+
+
+def test_catalog_search_excludes_non_matches_and_ignores_punctuation(client, db_session):
+    seed_shoe(db_session)  # Nike G.T. Cut 3
+    seed_shoe(db_session, canonical_id="nike-sabrina-2", name="Sabrina 2")
+
+    assert _catalog_names(client, search="sabrina") == ["Sabrina 2"]
+    assert _catalog_names(client, search="gt cut") == ["G.T. Cut 3"]
+    assert _catalog_names(client, search="nike sabrina") == ["Sabrina 2"]
+    assert _catalog_names(client, search="100%") == []
+
+
+def test_catalog_price_sorts_put_unpriced_shoes_last(client, db_session):
+    seed_shoe(db_session, canonical_id="a", name="Unpriced", price=None)
+    seed_shoe(db_session, canonical_id="b", name="Cheap", price=Decimal("90.00"))
+    seed_shoe(db_session, canonical_id="c", name="Pricey", price=Decimal("200.00"))
+
+    assert _catalog_names(client, sort="price_desc") == ["Pricey", "Cheap", "Unpriced"]
+    assert _catalog_names(client, sort="price_asc") == ["Cheap", "Pricey", "Unpriced"]
+
+
+def test_catalog_newest_uses_release_year_not_import_time(client, db_session):
+    imported = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    seed_shoe(db_session, canonical_id="a", name="Old", created_at=imported, specs={"release_year": 2019})
+    seed_shoe(db_session, canonical_id="b", name="Unknown", created_at=imported, specs={"release_year": None})
+    seed_shoe(db_session, canonical_id="c", name="New", created_at=imported, specs={"release_year": 2025})
+
+    assert _catalog_names(client, sort="newest") == ["New", "Old", "Unknown"]
+
+
+def test_catalog_rejects_unknown_sort(client):
+    res = client.get("/api/shoes", params={"sort": "popular"})
+    assert res.status_code == 422
 
 
 def test_get_shoe_detail_matches_db_shape(client, db_session):

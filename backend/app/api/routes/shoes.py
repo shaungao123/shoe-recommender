@@ -80,6 +80,8 @@ def list_shoes(
     position: str | None = Query(
         None, description="Must appear in specs.position_tags: guard | wing | big"
     ),
+    search: str | None = Query(None, min_length=1, max_length=128),
+    sort: str = Query("price_asc", pattern="^(price_asc|price_desc|newest)$"),
     limit: int = Query(20, ge=1, le=100),
     offset: int = Query(0, ge=0),
 ) -> ShoeListResponse:
@@ -102,6 +104,8 @@ def list_shoes(
         cut=cut,
         width=width,
         position=position,
+        search=search,
+        sort=sort,
         limit=limit,
         offset=offset,
     )

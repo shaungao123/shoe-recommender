@@ -24,7 +24,10 @@ def recommend(
 ) -> RecommendResponse:
     """Retrieve candidates, fall back if needed, pick top 3, explain."""
     playstyle = (request.playstyle or "").strip()
-    aesthetic = (request.aesthetic or "").strip()
+    aesthetic_parts = [(request.aesthetic or "").strip()]
+    if request.aesthetic_preferences:
+        aesthetic_parts.append(request.aesthetic_preferences.query_terms())
+    aesthetic = " ".join(part for part in aesthetic_parts if part).strip()
     has_semantic = bool(playstyle or aesthetic)
     filter_kwargs = dict(
         brand=request.brand,

@@ -6,6 +6,7 @@
 import { MOCK_LATENCY_MS, mockRecommendResponse } from "./mockData";
 import type {
   FeedbackRequest,
+  ProductEvent,
   RecommendRequest,
   RecommendResponse,
 } from "./types";
@@ -42,5 +43,18 @@ export function sendFeedback(feedback: FeedbackRequest): void {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(feedback),
+  }).catch(() => {});
+}
+
+/** Best-effort anonymous product analytics. Events never interrupt the flow. */
+export function trackEvent(event: ProductEvent): void {
+  if (isMockApi) return;
+  // Not sendBeacon: it always sends credentials, which this API's CORS policy
+  // rejects. keepalive still lets the request finish during page navigation.
+  void fetch(`${API_URL}/events`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(event),
+    keepalive: true,
   }).catch(() => {});
 }

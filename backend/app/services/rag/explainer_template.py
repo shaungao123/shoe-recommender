@@ -7,7 +7,7 @@ prose from specs + best-matching snippets so /recommend works without an LLM.
 from __future__ import annotations
 
 from app.schemas.candidate import Candidate
-from app.schemas.recommend import RecommendedShoe
+from app.schemas.recommend import EvidenceSnippet, RecommendedShoe
 
 _SPEC_CHIP_KEYS = (
     ("cut_height", "{} cut"),
@@ -32,6 +32,11 @@ def _to_recommendation(candidate: Candidate, *, playstyle: str) -> RecommendedSh
         affiliate_url=candidate.affiliate_url,
         specs=_spec_chips(candidate),
         explanation=_build_explanation(candidate, playstyle=playstyle),
+        evidence=[
+            EvidenceSnippet(source=snippet.source, text=_shorten(snippet.text))
+            for snippet in candidate.snippets[:2]
+            if _shorten(snippet.text)
+        ],
         similarity=candidate.similarity,
     )
 

@@ -5,6 +5,12 @@ metadata:
   namespace: shoe-recommender
 spec:
   replicas: 1
+  # See backend/deployment.yaml — no headroom for a surge pod on a single 2GB node.
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 0
+      maxUnavailable: 1
   selector:
     matchLabels: { app: frontend }
   template:
