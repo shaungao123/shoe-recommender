@@ -2,6 +2,7 @@
 
 import { Chip } from "@/components/Chip";
 import { isMockApi } from "@/lib/api";
+import type { AestheticPreferences } from "@/lib/types";
 
 export const POSITIONS = ["Guard", "Wing", "Big"] as const;
 export const STYLE_TAGS = [
@@ -13,6 +14,23 @@ export const STYLE_TAGS = [
   "Speedster",
 ] as const;
 export const BUDGETS = ["$100", "$140", "$180+"] as const;
+const BRAND_OPTIONS = ["Nike", "Jordan", "Adidas", "Puma", "New Balance"] as const;
+const COLOR_OPTIONS = [
+  ["neutral", "Neutral"],
+  ["dark", "Dark"],
+  ["bright", "Bright"],
+  ["team_colors", "Team colors"],
+] as const;
+const VISUAL_OPTIONS = [
+  ["classic_retro", "Classic / retro"],
+  ["modern_technical", "Modern / technical"],
+  ["minimal", "Minimal"],
+] as const;
+const SILHOUETTE_OPTIONS = [
+  ["low", "Low"],
+  ["mid", "Mid"],
+  ["high", "High"],
+] as const;
 
 export interface IntakeState {
   position: string | null;
@@ -20,6 +38,7 @@ export interface IntakeState {
   freeText: string;
   budget: string | null;
   aesthetic: string;
+  aestheticPreferences: AestheticPreferences;
 }
 
 interface IntakeScreenProps {
@@ -27,6 +46,7 @@ interface IntakeScreenProps {
   onChange: (intake: IntakeState) => void;
   onSubmit: () => void;
   onSimulateError: () => void;
+  validationMessage: string | null;
 }
 
 function SectionLabel({
@@ -53,6 +73,7 @@ export function IntakeScreen({
   onChange,
   onSubmit,
   onSimulateError,
+  validationMessage,
 }: IntakeScreenProps) {
   const toggleStyle = (label: string) =>
     onChange({
@@ -92,6 +113,114 @@ export function IntakeScreen({
               onClick={() => onChange({ ...intake, position: label })}
             />
           ))}
+        </div>
+      </div>
+
+      <div className="mb-9 rounded-2xl border border-line bg-white p-5 sm:p-6">
+        <div className="mb-2 text-[17px]/tight font-extrabold">
+          Your look, if it matters
+        </div>
+        <p className="mb-5 font-serif text-sm/[1.5] text-muted">
+          These are preferences, not deal-breakers. We&apos;ll never claim a
+          shoe matches a look unless the catalog can support it.
+        </p>
+
+        <div className="mb-5">
+          <SectionLabel>Brand preference</SectionLabel>
+          <div className="flex flex-wrap gap-2.5">
+            {BRAND_OPTIONS.map((label) => (
+              <Chip
+                key={label}
+                label={label}
+                selected={intake.aestheticPreferences.brand === label}
+                onClick={() =>
+                  onChange({
+                    ...intake,
+                    aestheticPreferences: {
+                      ...intake.aestheticPreferences,
+                      brand:
+                        intake.aestheticPreferences.brand === label ? null : label,
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Color direction</SectionLabel>
+          <div className="flex flex-wrap gap-2.5">
+            {COLOR_OPTIONS.map(([value, label]) => (
+              <Chip
+                key={value}
+                label={label}
+                selected={intake.aestheticPreferences.color_family === value}
+                onClick={() =>
+                  onChange({
+                    ...intake,
+                    aestheticPreferences: {
+                      ...intake.aestheticPreferences,
+                      color_family:
+                        intake.aestheticPreferences.color_family === value
+                          ? null
+                          : value,
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+
+        <div className="mb-5">
+          <SectionLabel>Visual direction</SectionLabel>
+          <div className="flex flex-wrap gap-2.5">
+            {VISUAL_OPTIONS.map(([value, label]) => (
+              <Chip
+                key={value}
+                label={label}
+                selected={intake.aestheticPreferences.visual_direction === value}
+                onClick={() =>
+                  onChange({
+                    ...intake,
+                    aestheticPreferences: {
+                      ...intake.aestheticPreferences,
+                      visual_direction:
+                        intake.aestheticPreferences.visual_direction === value
+                          ? null
+                          : value,
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
+        </div>
+
+        <div>
+          <SectionLabel>Silhouette</SectionLabel>
+          <div className="flex flex-wrap gap-2.5">
+            {SILHOUETTE_OPTIONS.map(([value, label]) => (
+              <Chip
+                key={value}
+                label={label}
+                selected={intake.aestheticPreferences.silhouette === value}
+                onClick={() =>
+                  onChange({
+                    ...intake,
+                    aestheticPreferences: {
+                      ...intake.aestheticPreferences,
+                      silhouette:
+                        intake.aestheticPreferences.silhouette === value
+                          ? null
+                          : value,
+                    },
+                  })
+                }
+              />
+            ))}
+          </div>
         </div>
       </div>
 
@@ -155,6 +284,11 @@ export function IntakeScreen({
       {!canSubmit && (
         <p className="mt-3 text-center text-xs/none text-fainter">
           Still needed: {missing.join(", ")}.
+        </p>
+      )}
+      {validationMessage && (
+        <p role="alert" className="mt-3 text-center text-sm font-medium text-accent-deep">
+          {validationMessage}
         </p>
       )}
       {isMockApi && (

@@ -1,19 +1,24 @@
 "use client";
 
 import { ShoeCard } from "@/components/ShoeCard";
-import type { FeedbackVote, RecommendedShoe } from "@/lib/types";
+import type { FeedbackReason, FeedbackVote, RecommendedShoe } from "@/lib/types";
 
 interface ResultsScreenProps {
   /** Ranked best-first. */
   shoes: RecommendedShoe[];
   feedback: Record<number, FeedbackVote | null>;
-  onVote: (shoeId: number, vote: FeedbackVote) => void;
+  onVote: (
+    shoeId: number,
+    vote: FeedbackVote,
+    details?: { reason?: FeedbackReason; comment?: string },
+  ) => void;
+  onBuyIntent: (shoeId: number, hasAffiliateLink: boolean) => void;
 }
 
 /** On desktop the top pick sits center podium: rank 2, rank 1, rank 3. */
 const PODIUM_ORDER = ["lg:order-2", "lg:order-1", "lg:order-3"];
 
-export function ResultsScreen({ shoes, feedback, onVote }: ResultsScreenProps) {
+export function ResultsScreen({ shoes, feedback, onVote, onBuyIntent }: ResultsScreenProps) {
   return (
     <div className="mt-6 w-full max-w-[1080px]">
       <div className="mb-8">
@@ -31,7 +36,8 @@ export function ResultsScreen({ shoes, feedback, onVote }: ResultsScreenProps) {
               shoe={shoe}
               isTop={i === 0}
               vote={feedback[shoe.id] ?? null}
-              onVote={(v) => onVote(shoe.id, v)}
+              onVote={(v, details) => onVote(shoe.id, v, details)}
+              onBuyIntent={() => onBuyIntent(shoe.id, Boolean(shoe.affiliate_url))}
             />
           </div>
         ))}

@@ -22,6 +22,10 @@ from shared.db.models import Embedding, Shoe
 # lists then come back shorter, which degrades gracefully.
 OVERFETCH_FACTOR = 4
 
+# Catalog search ignores punctuation, so "gt cut" finds "G.T. Cut 3".
+_SEARCH_FOLD_PAIRS = ((".", ""), ("'", ""), ("’", ""), ("-", " "))
+_SEARCH_FOLD = str.maketrans(dict(_SEARCH_FOLD_PAIRS))
+
 
 @dataclass
 class ChunkHit:
@@ -53,6 +57,14 @@ def _json_array_contains(shoe_col, key: str, value: str):
     return cast(shoe_col[key], String).like(f'%"{value}"%')
 
 
+def _searchable_text():
+    """Lowercased "brand name" with the same folding as the search term."""
+    text = func.lower(Shoe.brand + " " + Shoe.name)
+    for char, replacement in _SEARCH_FOLD_PAIRS:
+        text = func.replace(text, char, replacement)
+    return text
+
+
 def _apply_filters(
     stmt,
     *,
@@ -64,6 +76,7 @@ def _apply_filters(
     cut: str | None = None,
     width: str | None = None,
     position: str | None = None,
+    search: str | None = None,
 ):
     if brand is not None:
         stmt = stmt.where(func.lower(Shoe.brand) == brand.lower())
@@ -81,6 +94,9 @@ def _apply_filters(
         stmt = stmt.where(_json_array_contains(Shoe.specs, "playstyle_tags", playstyle))
     if position is not None:
         stmt = stmt.where(_json_array_contains(Shoe.specs, "position_tags", position))
+    if search:
+        term = search.strip().lower().translate(_SEARCH_FOLD)
+        stmt = stmt.where(_searchable_text().contains(term, autoescape=True))
     return stmt
 
 
@@ -95,6 +111,8 @@ def list_shoes(
     cut: str | None = None,
     width: str | None = None,
     position: str | None = None,
+    search: str | None = None,
+    sort: str = "price_asc",
     limit: int = 20,
     offset: int = 0,
 ) -> tuple[list[Shoe], int]:
@@ -108,14 +126,26 @@ def list_shoes(
         cut=cut,
         width=width,
         position=position,
+        search=search,
     )
     base = _apply_filters(select(Shoe), **filters)
     total = session.scalar(
         _apply_filters(select(func.count()).select_from(Shoe), **filters)
     ) or 0
+    order_by = {
+        "price_asc": (Shoe.price.asc().nulls_last(), Shoe.name.asc(), Shoe.id),
+        "price_desc": (Shoe.price.desc().nulls_last(), Shoe.name.asc(), Shoe.id),
+        # created_at is only the import time; release year is the real "newest".
+        "newest": (
+            Shoe.specs["release_year"].as_integer().desc().nulls_last(),
+            Shoe.created_at.desc(),
+            Shoe.name.asc(),
+            Shoe.id,
+        ),
+    }[sort]
     rows = list(
         session.scalars(
-            base.order_by(Shoe.price.asc(), Shoe.name.asc()).limit(limit).offset(offset)
+            base.order_by(*order_by).limit(limit).offset(offset)
         )
     )
     return rows, total

@@ -5,7 +5,7 @@ from sqlalchemy import engine_from_config, pool
 
 from shared.config import settings
 from shared.db.base import Base
-from shared.db.models import Embedding, Shoe  # noqa: F401 — register metadata
+from shared.db.models import Embedding, Feedback, ProductEvent, Shoe  # noqa: F401
 
 config = context.config
 

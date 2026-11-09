@@ -1,19 +1,40 @@
 "use client";
 
-import type { FeedbackVote, RecommendedShoe } from "@/lib/types";
+import { useState } from "react";
+
+import type { FeedbackReason, FeedbackVote, RecommendedShoe } from "@/lib/types";
 
 interface ShoeCardProps {
   shoe: RecommendedShoe;
   isTop: boolean;
   vote: FeedbackVote | null;
-  onVote: (vote: FeedbackVote) => void;
+  onVote: (vote: FeedbackVote, details?: { reason?: FeedbackReason; comment?: string }) => void;
+  onBuyIntent: () => void;
 }
+
+const DOWNVOTE_REASONS: { value: FeedbackReason; label: string }[] = [
+  { value: "not_my_playstyle", label: "Doesn’t fit my game" },
+  { value: "too_expensive", label: "Too expensive" },
+  { value: "not_my_style", label: "Not my style" },
+  { value: "fit_or_comfort", label: "Fit or comfort concern" },
+  { value: "other", label: "Something else" },
+];
 
 function formatPrice(price: number | null): string {
   return price !== null ? `$${Math.round(price)}` : "—";
 }
 
-export function ShoeCard({ shoe, isTop, vote, onVote }: ShoeCardProps) {
+export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardProps) {
+  const [showFeedbackForm, setShowFeedbackForm] = useState(false);
+  const [reason, setReason] = useState<FeedbackReason | null>(null);
+  const [comment, setComment] = useState("");
+
+  const submitDownvote = () => {
+    if (!reason) return;
+    onVote("down", { reason, comment: comment.trim() || undefined });
+    setShowFeedbackForm(false);
+  };
+
   return (
     <div
       className={`relative flex flex-col overflow-hidden rounded-[18px] border border-line bg-white ${
@@ -74,20 +95,48 @@ export function ShoeCard({ shoe, isTop, vote, onVote }: ShoeCardProps) {
           {shoe.explanation}
         </p>
 
+        {shoe.evidence && shoe.evidence.length > 0 && (
+          <details className="mb-5 rounded-xl bg-paper px-3.5 py-3">
+            <summary className="cursor-pointer text-[13px]/none font-bold text-ink">
+              See the review evidence
+            </summary>
+            <div className="mt-3 space-y-3">
+              {shoe.evidence.slice(0, 2).map((excerpt, index) => (
+                <blockquote
+                  key={`${excerpt.source ?? "source"}-${index}`}
+                  className="border-l-2 border-accent pl-3 font-serif text-[13px]/[1.5] text-muted"
+                >
+                  “{excerpt.text}”
+                  {excerpt.source && (
+                    <footer className="mt-1 font-sans text-[10px]/none font-bold tracking-[.06em] text-faint uppercase">
+                      {excerpt.source}
+                    </footer>
+                  )}
+                </blockquote>
+              ))}
+            </div>
+          </details>
+        )}
+
         <div className="mb-3.5">
           {shoe.affiliate_url ? (
             <a
               href={shoe.affiliate_url}
               target="_blank"
               rel="sponsored noopener"
+              onClick={onBuyIntent}
               className="block rounded-full bg-accent p-[13px] text-center text-[13px]/none font-bold text-white transition-colors hover:bg-accent-deep"
             >
               Shop this shoe
             </a>
           ) : (
-            <div className="rounded-full border-[1.5px] border-dashed border-line p-[13px] text-center text-[13px]/none font-bold text-faint">
+            <button
+              type="button"
+              onClick={onBuyIntent}
+              className="w-full cursor-pointer rounded-full border-[1.5px] border-dashed border-line p-[13px] text-center text-[13px]/none font-bold text-faint transition-colors hover:border-ink hover:text-ink"
+            >
               Buy links coming soon
-            </div>
+            </button>
           )}
         </div>
 
@@ -102,7 +151,13 @@ export function ShoeCard({ shoe, isTop, vote, onVote }: ShoeCardProps) {
                 type="button"
                 aria-label={v === "up" ? "Good recommendation" : "Bad recommendation"}
                 aria-pressed={vote === v}
-                onClick={() => onVote(v)}
+                onClick={() => {
+                  if (v === "down") {
+                    setShowFeedbackForm((open) => !open);
+                    return;
+                  }
+                  onVote("up");
+                }}
                 className={`flex size-[38px] cursor-pointer items-center justify-center rounded-full border-[1.5px] text-[15px] ${
                   vote === v ? "border-ink bg-ink" : "border-line bg-white"
                 }`}
@@ -112,6 +167,49 @@ export function ShoeCard({ shoe, isTop, vote, onVote }: ShoeCardProps) {
             ))}
           </div>
         </div>
+        {showFeedbackForm && (
+          <div className="mt-4 rounded-xl border border-line bg-paper p-3.5">
+            <p className="mb-3 text-[13px]/tight font-bold text-ink">
+              What missed the mark?
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {DOWNVOTE_REASONS.map((item) => (
+                <button
+                  key={item.value}
+                  type="button"
+                  onClick={() => setReason(item.value)}
+                  className={`cursor-pointer rounded-full border px-3 py-2 text-xs/none font-semibold transition-colors ${
+                    reason === item.value
+                      ? "border-ink bg-ink text-white"
+                      : "border-line bg-white text-muted hover:border-ink"
+                  }`}
+                >
+                  {item.label}
+                </button>
+              ))}
+            </div>
+            <label className="mt-3 block text-xs font-semibold text-muted" htmlFor={`feedback-${shoe.id}`}>
+              Anything else? <span className="font-normal">Optional</span>
+            </label>
+            <textarea
+              id={`feedback-${shoe.id}`}
+              value={comment}
+              onChange={(event) => setComment(event.target.value)}
+              maxLength={500}
+              rows={2}
+              className="mt-1.5 w-full resize-y rounded-lg border border-line bg-white px-3 py-2 text-sm outline-none focus:border-ink"
+              placeholder="Tell us what would have made this better"
+            />
+            <button
+              type="button"
+              disabled={!reason}
+              onClick={submitDownvote}
+              className="mt-3 cursor-pointer rounded-full bg-ink px-4 py-2 text-xs/none font-bold text-white disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Send feedback
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

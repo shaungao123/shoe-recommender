@@ -74,6 +74,7 @@ def test_recommend_frontend_shape_uses_fallback(client, db_session, monkeypatch:
     assert top["price"] == 190.0
     assert isinstance(top["specs"], list)
     assert isinstance(top["explanation"], str) and top["explanation"]
+    assert isinstance(top["evidence"], list)
     assert top["similarity"] is None  # fallback marker
 
 
@@ -169,6 +170,9 @@ def test_recommend_vector_path_mocked(client, db_session, monkeypatch: pytest.Mo
     assert recs[0]["similarity"] == pytest.approx(0.88)
     assert "runrepeat" in recs[0]["explanation"]
     assert "Elite court feel" in recs[0]["explanation"]
+    assert recs[0]["evidence"] == [
+        {"source": "runrepeat", "text": "Elite court feel."}
+    ]
 
 
 def test_recommend_empty_vector_hits_falls_back(client, db_session, monkeypatch: pytest.MonkeyPatch):

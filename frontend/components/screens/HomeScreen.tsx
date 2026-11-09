@@ -1,5 +1,7 @@
 "use client";
 
+import Link from "next/link";
+
 import { trendingPlaceholder } from "@/lib/mockData";
 
 interface HomeScreenProps {
@@ -28,6 +30,12 @@ export function HomeScreen({ onStart }: HomeScreenProps) {
         >
           Find my shoe
         </button>
+        <Link
+          href="/catalog"
+          className="mt-4 text-sm font-bold text-[#c9c6bd] underline decoration-[#6a665c] underline-offset-4 hover:text-white"
+        >
+          Or browse the catalog
+        </Link>
       </div>
 
       <div className="mt-14 mb-6">

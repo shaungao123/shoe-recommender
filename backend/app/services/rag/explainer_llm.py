@@ -13,7 +13,7 @@ from typing import Any
 from pydantic import BaseModel, Field, field_validator
 
 from app.schemas.candidate import Candidate
-from app.schemas.recommend import RecommendedShoe
+from app.schemas.recommend import EvidenceSnippet, RecommendedShoe
 from shared.llm import LLMClient, LLMError, get_llm_client
 
 SYSTEM_PROMPT = """\
@@ -122,6 +122,11 @@ def explain(
             affiliate_url=candidate.affiliate_url,
             specs=card.specs,
             explanation=card.explanation,
+            evidence=[
+                EvidenceSnippet(source=snippet.source, text=_shorten_evidence(snippet.text))
+                for snippet in candidate.snippets[:2]
+                if _shorten_evidence(snippet.text)
+            ],
             similarity=candidate.similarity,
         )
         for candidate, card in zip(candidates, batch.cards, strict=True)
@@ -145,7 +150,7 @@ def _build_user_prompt(
         "",
     ]
     for index, candidate in enumerate(candidates, start=1):
-        price = f"${candidate.price:g}" if candidate.price is not None else "price unknown"
+        price = f"${candidate.price:g}" if candidate.price is not None else "price unavailable"
         lines.append(f"[{index}] {candidate.brand} {candidate.name} — {price}")
         lines.append(f"Specs JSON: {json.dumps(candidate.specs or {}, sort_keys=True)}")
         if candidate.similarity is not None:
@@ -163,3 +168,8 @@ def _build_user_prompt(
         lines.append("")
     lines.append("Produce one recommendation card per candidate in the same order.")
     return "\n".join(lines)
+
+
+def _shorten_evidence(text: str, max_chars: int = 180) -> str:
+    cleaned = " ".join(text.split())
+    return cleaned if len(cleaned) <= max_chars else cleaned[: max_chars - 1].rstrip() + "…"
