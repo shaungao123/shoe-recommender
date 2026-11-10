@@ -5,7 +5,14 @@ from sqlalchemy import engine_from_config, pool
 
 from shared.config import settings
 from shared.db.base import Base
-from shared.db.models import Embedding, Feedback, ProductEvent, Shoe  # noqa: F401
+from shared.db.models import (  # noqa: F401
+    Embedding,
+    Feedback,
+    ProductEvent,
+    Shoe,
+    User,
+    WishlistItem,
+)
 
 config = context.config
 

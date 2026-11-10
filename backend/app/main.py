@@ -5,7 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.router import api_router
 from shared.config import settings
-from shared.db.models import Shoe  # noqa: F401 — register model metadata
+from shared.db import models  # noqa: F401 — register model metadata
 
 
 def create_app() -> FastAPI:

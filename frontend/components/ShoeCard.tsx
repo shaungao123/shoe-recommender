@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { SaveShoeButton } from "@/components/SaveShoeButton";
 import { isMockApi } from "@/lib/api";
 import type { FeedbackReason, FeedbackVote, RecommendedShoe } from "@/lib/types";
 
@@ -143,6 +144,8 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
             See full scores and specs
           </Link>
         )}
+
+        <SaveShoeButton shoeId={shoe.id} className="mb-3.5 w-full" />
 
         <div className="mb-3.5">
           {shoe.affiliate_url ? (

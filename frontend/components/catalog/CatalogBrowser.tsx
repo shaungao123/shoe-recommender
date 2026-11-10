@@ -4,6 +4,7 @@ import { useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import { CatalogCard } from "@/components/catalog/CatalogCard";
+import { useWishlistIds } from "@/components/SaveShoeButton";
 import { CATALOG_SORT_OPTIONS, catalogFiltersFromUrl, catalogUrlQuery, EMPTY_CATALOG_FILTERS, getCatalog, rememberCatalogView, type CatalogFilters, type CatalogShoe } from "@/lib/catalog";
 import { trackEvent } from "@/lib/api";
 import { getAnonymousSessionId } from "@/lib/session";
@@ -28,6 +29,7 @@ function SelectFilter({ title, value, options, onChange }: { title: string; valu
 
 export function CatalogBrowser() {
   const searchParams = useSearchParams();
+  const { ids: wishlistIds, signedIn } = useWishlistIds();
   const [filters, setFilters] = useState<CatalogFilters>(() => catalogFiltersFromUrl(searchParams));
   const [searchText, setSearchText] = useState(filters.query);
   const [shoes, setShoes] = useState<CatalogShoe[]>([]);
@@ -123,6 +125,6 @@ export function CatalogBrowser() {
       <SelectFilter title="Width" value={filters.width} options={OPTIONS.width} onChange={(value) => update("width", value)} />
     </div>
     <div className="mb-5 flex items-center justify-between"><h2 className="text-xl font-extrabold">{loading ? "Loading catalog…" : `${total} shoe${total === 1 ? "" : "s"}`}</h2></div>
-    {error ? <div className="rounded-2xl border border-line bg-white p-8 text-center"><p className="font-serif text-muted">We couldn’t load the catalog right now.</p><button type="button" onClick={() => void load()} className="mt-4 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white">Try again</button></div> : loading ? <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-[335px] animate-pulse rounded-2xl border border-line bg-white" />)}</div> : shoes.length === 0 ? <div className="rounded-2xl border border-line bg-white p-10 text-center"><h2 className="text-xl font-extrabold">No shoes match those filters.</h2><p className="mt-2 font-serif text-muted">Try a higher budget or remove a filter to widen the search.</p><button type="button" onClick={clear} className="mt-5 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white">Clear filters</button></div> : <><div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{shoes.map((shoe) => <CatalogCard key={shoe.id} shoe={shoe} />)}</div>{shoes.length < total && <div className="mt-9 text-center"><button type="button" disabled={loadingMore} onClick={() => void load(shoes.length, true)} className="rounded-full border border-ink px-6 py-3 text-sm font-bold disabled:opacity-50">{loadingMore ? "Loading…" : "Show more shoes"}</button></div>}</>}
+    {error ? <div className="rounded-2xl border border-line bg-white p-8 text-center"><p className="font-serif text-muted">We couldn’t load the catalog right now.</p><button type="button" onClick={() => void load()} className="mt-4 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white">Try again</button></div> : loading ? <div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{Array.from({ length: 6 }, (_, index) => <div key={index} className="h-[335px] animate-pulse rounded-2xl border border-line bg-white" />)}</div> : shoes.length === 0 ? <div className="rounded-2xl border border-line bg-white p-10 text-center"><h2 className="text-xl font-extrabold">No shoes match those filters.</h2><p className="mt-2 font-serif text-muted">Try a higher budget or remove a filter to widen the search.</p><button type="button" onClick={clear} className="mt-5 rounded-full bg-ink px-5 py-2.5 text-sm font-bold text-white">Clear filters</button></div> : <><div className="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">{shoes.map((shoe) => <CatalogCard key={shoe.id} shoe={shoe} canSave={signedIn} saved={wishlistIds?.has(shoe.id)} />)}</div>{shoes.length < total && <div className="mt-9 text-center"><button type="button" disabled={loadingMore} onClick={() => void load(shoes.length, true)} className="rounded-full border border-ink px-6 py-3 text-sm font-bold disabled:opacity-50">{loadingMore ? "Loading…" : "Show more shoes"}</button></div>}</>}
   </main>;
 }

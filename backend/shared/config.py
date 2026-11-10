@@ -23,6 +23,8 @@ class Settings(BaseSettings):
     google_application_credentials: str = ""
     supabase_url: str = ""
     supabase_service_role_key: str = ""
+    # JWT audience claim for Supabase Auth access tokens (API auth only).
+    supabase_jwt_audience: str = "authenticated"
 
     @field_validator("database_url")
     @classmethod

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ScoreBar } from "@/components/catalog/ScoreBar";
+import { SaveShoeButton } from "@/components/SaveShoeButton";
 import {
   catalogReturnPath,
   getShoe,
@@ -196,18 +197,21 @@ export function ShoeDetailView({ id }: { id: number }) {
           <div className="mt-6 flex flex-wrap gap-2">
             {chips.map((item) => <span key={item} className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-muted">{item}</span>)}
           </div>
+          <div className="mt-6">
+            <SaveShoeButton shoeId={shoe.id} />
+          </div>
           {shoe.affiliate_url ? (
             <a
               href={shoe.affiliate_url}
               target="_blank"
               rel="sponsored noopener"
               onClick={() => trackEvent({ session_id: getAnonymousSessionId(), name: "buy_link_intent", properties: { shoe_id: id } })}
-              className="mt-8 block rounded-full bg-accent p-4 text-center text-sm font-bold text-white transition-colors hover:bg-accent-deep"
+              className="mt-4 block rounded-full bg-accent p-4 text-center text-sm font-bold text-white transition-colors hover:bg-accent-deep"
             >
               Shop this shoe
             </a>
           ) : (
-            <div className="mt-8 rounded-2xl border border-dashed border-line bg-white p-4 text-center text-sm font-bold text-faint">Buy links coming soon</div>
+            <div className="mt-4 rounded-2xl border border-dashed border-line bg-white p-4 text-center text-sm font-bold text-faint">Buy links coming soon</div>
           )}
         </div>
       </div>

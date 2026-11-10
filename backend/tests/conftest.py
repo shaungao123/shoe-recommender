@@ -11,15 +11,18 @@ from decimal import Decimal
 
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy import create_engine
+from uuid import UUID, uuid4
+
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
 from app.db.session import get_db
+from app.dependencies import get_current_user
 from app.main import create_app
 from shared.db import models  # noqa: F401 — register model metadata
 from shared.db.base import Base
-from shared.db.models import Shoe
+from shared.db.models import Shoe, User
 
 _DEFAULT_SPECS = {
     "version": "3",
@@ -74,14 +77,23 @@ def db_session() -> Iterator[Session]:
     Fine for repository/retriever/API logic that doesn't touch pgvector operators;
     anything exercising cosine_distance needs real Postgres and isn't unit-tested.
     StaticPool so the TestClient and seed helpers share one connection.
+    Foreign keys are on so wishlist cascades can be asserted.
     """
     engine = create_engine(
         "sqlite://",
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+    @event.listens_for(engine, "connect")
+    def _enable_foreign_keys(dbapi_connection, connection_record) -> None:  # noqa: ARG001
+        cursor = dbapi_connection.cursor()
+        cursor.execute("PRAGMA foreign_keys=ON")
+        cursor.close()
+
     Base.metadata.create_all(engine)
     with Session(engine) as session:
+        session.execute(text("PRAGMA foreign_keys=ON"))
         yield session
 
 
@@ -95,6 +107,42 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
     with TestClient(app) as test_client:
         yield test_client
     app.dependency_overrides.clear()
+
+
+def seed_user(
+    session: Session,
+    *,
+    user_id: UUID | None = None,
+    email: str = "player@example.com",
+    display_name: str | None = "Player One",
+) -> User:
+    row = User(
+        id=user_id or uuid4(),
+        email=email,
+        display_name=display_name,
+    )
+    session.add(row)
+    session.commit()
+    session.refresh(row)
+    return row
+
+
+@pytest.fixture()
+def auth_user(db_session: Session) -> User:
+    return seed_user(db_session)
+
+
+@pytest.fixture()
+def auth_client(client: TestClient, auth_user: User) -> Generator[TestClient, None, None]:
+    """TestClient with get_current_user overridden to a seeded profile."""
+    app = client.app
+
+    def override_user() -> User:
+        return auth_user
+
+    app.dependency_overrides[get_current_user] = override_user
+    yield client
+    app.dependency_overrides.pop(get_current_user, None)
 
 
 def seed_shoe(session: Session, **kwargs) -> Shoe:

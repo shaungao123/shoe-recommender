@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 
+import { AccountNav } from "@/components/AccountNav";
 import { ErrorScreen } from "@/components/screens/ErrorScreen";
 import { HomeScreen } from "@/components/screens/HomeScreen";
 import {
@@ -224,7 +225,7 @@ export function RecommenderFlow() {
         >
           The Assist
         </button>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-1 sm:gap-3">
           <Link
             href="/catalog"
             className="rounded-full px-3.5 py-2.5 text-[13px]/none font-semibold text-muted transition-colors hover:text-ink"
@@ -240,6 +241,7 @@ export function RecommenderFlow() {
               Start over
             </button>
           )}
+          <AccountNav />
         </div>
       </header>
 
