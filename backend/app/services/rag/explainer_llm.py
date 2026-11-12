@@ -33,6 +33,12 @@ Rules:
 - Return one card per candidate, in the same order as the input list.
 - If evidence is thin, say the shoe is a solid match for the stated criteria
   without fabricating details.
+- "Why it ranked" lists the facts that put this shoe in the shopper's top 3.
+  Lead with the one most relevant to what the shopper asked for.
+- These are the shopper's picks: if the evidence shows a weakness for their
+  needs, mention it briefly as a caveat; never tell them to look elsewhere.
+- Do not make health or injury claims (e.g. about recovery or preventing
+  sprains); describe the shoe's support or stability instead.
 """
 
 # Strict JSON schema for OpenAI response_format (additionalProperties: false).
@@ -154,6 +160,8 @@ def _build_user_prompt(
         price = f"${candidate.price:g}" if candidate.price is not None else "price unavailable"
         lines.append(f"[{index}] {candidate.brand} {candidate.name} — {price}")
         lines.append(f"Specs JSON: {json.dumps(candidate.specs or {}, sort_keys=True)}")
+        if candidate.match_reasons:
+            lines.append(f"Why it ranked: {'; '.join(candidate.match_reasons)}")
         if candidate.similarity is not None:
             lines.append(f"Similarity: {candidate.similarity:.2f}")
         else:

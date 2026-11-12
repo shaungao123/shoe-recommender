@@ -1,20 +1,22 @@
 """Upsert writer unit tests — in-memory SQLite, no network, no Postgres."""
 
 from decimal import Decimal
+from uuid import uuid4
 
 import pytest
 from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
 
-from pipeline.upsert.writer import shoe_values_from_canonical, upsert_shoes
-from shared.db.models import Shoe
+from pipeline.upsert.writer import ReferencedShoesError, shoe_values_from_canonical, upsert_shoes
+from shared.db.models import Feedback, Shoe, User, WishlistItem
 
 
 @pytest.fixture()
 def session():
     engine = create_engine("sqlite://")
-    # only the shoes table — the embeddings Vector type is Postgres-only
-    Shoe.__table__.create(engine)
+    # not the embeddings table — its Vector type is Postgres-only
+    for model in (Shoe, User, WishlistItem, Feedback):
+        model.__table__.create(engine)
     with Session(engine) as db:
         yield db
 
@@ -161,3 +163,26 @@ def test_upsert_preserves_image_url_and_image_search(session):
     )
     assert row.extra_metadata["image_search"]["publisher_url"] == "https://nike.com/gt3.jpg"
     assert row.extra_metadata["metrics"]["runrepeat"]["overall"] == 88
+
+
+def _stale_shoe(session) -> Shoe:
+    shoe = Shoe(canonical_id="retired-1", brand="Old", name="Retired", price=1, specs={}, extra_metadata={})
+    session.add(shoe)
+    session.commit()
+    return shoe
+
+
+def test_shoes_on_wishlists_are_not_deleted_without_permission(session):
+    shoe = _stale_shoe(session)
+    user = User(id=uuid4(), email="player@example.com")
+    session.add(user)
+    session.flush()
+    session.add(WishlistItem(user_id=user.id, shoe_id=shoe.id))
+    session.commit()
+
+    with pytest.raises(ReferencedShoesError, match="Old Retired"):
+        upsert_shoes(session, [make_canonical()])
+    session.rollback()
+
+    result = upsert_shoes(session, [make_canonical()], allow_deleting_referenced=True)
+    assert result.deleted == 1

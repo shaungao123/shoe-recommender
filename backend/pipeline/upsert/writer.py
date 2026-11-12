@@ -4,6 +4,14 @@
     python -m pipeline.upsert.writer --dry-run       # report counts, roll back
     python -m pipeline.upsert.writer --staging PATH  # alternate corpus file
 
+Review tags from ``pipeline.tags.review_tags`` (``staging/review_tags.json``)
+are merged into the scraped tags before writing. The writer refuses to run
+without that file unless ``--without-review-tags`` is passed, because writing
+the scrape alone would silently drop them.
+
+Shoes that are on a wishlist or have feedback are never deleted silently: the
+writer stops and names them unless ``--allow-deleting-referenced`` is passed.
+
 Reads the staging corpus produced by ``pipeline.run`` and makes the ``shoes``
 table match it: upserts by ``canonical_id``, then deletes every row that is
 not in the batch — including rows with no ``canonical_id`` at all (pre-pipeline
@@ -29,8 +37,9 @@ from typing import Any
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
+from pipeline.tags.review_tags import apply_review_tags, load_cache
 from shared.config import settings
-from shared.db.models import Shoe
+from shared.db.models import Feedback, Shoe, WishlistItem
 
 logger = logging.getLogger(__name__)
 
@@ -66,7 +75,12 @@ METADATA_FIELDS = (
     "review_text",
     "provenance",
     "sources",
+    "review_tags",  # quote behind each review-extracted tag, for citations
 )
+
+
+class ReferencedShoesError(RuntimeError):
+    """Deleting these shoes would remove users' wishlist items or orphan feedback."""
 
 
 @dataclass
@@ -107,7 +121,20 @@ def shoe_values_from_canonical(shoe: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def upsert_shoes(session: Session, canonical: list[dict[str, Any]]) -> UpsertResult:
+def _referenced_shoes(session: Session, shoe_ids: list[int]) -> list[Shoe]:
+    if not shoe_ids:
+        return []
+    referenced = set(
+        session.scalars(select(WishlistItem.shoe_id).where(WishlistItem.shoe_id.in_(shoe_ids)))
+    ) | set(session.scalars(select(Feedback.shoe_id).where(Feedback.shoe_id.in_(shoe_ids))))
+    return list(session.scalars(select(Shoe).where(Shoe.id.in_(referenced)))) if referenced else []
+
+
+def upsert_shoes(
+    session: Session,
+    canonical: list[dict[str, Any]],
+    allow_deleting_referenced: bool = False,
+) -> UpsertResult:
     """Make the shoes table match the canonical batch. Caller commits."""
     result = UpsertResult()
     existing = {
@@ -139,10 +166,16 @@ def upsert_shoes(session: Session, canonical: list[dict[str, Any]]) -> UpsertRes
                     changed = True
             result.updated += changed
 
-    stale = delete(Shoe).where(
-        or_(Shoe.canonical_id.is_(None), Shoe.canonical_id.not_in(seen))
-    )
-    result.deleted = session.execute(stale).rowcount
+    is_stale = or_(Shoe.canonical_id.is_(None), Shoe.canonical_id.not_in(seen))
+    stale_ids = list(session.scalars(select(Shoe.id).where(is_stale)))
+    referenced = _referenced_shoes(session, stale_ids)
+    if referenced and not allow_deleting_referenced:
+        names = ", ".join(f"{shoe.brand} {shoe.name}" for shoe in referenced)
+        raise ReferencedShoesError(
+            f"{len(referenced)} shoe(s) missing from this batch are on wishlists or have "
+            f"feedback: {names}"
+        )
+    result.deleted = session.execute(delete(Shoe).where(is_stale)).rowcount
     return result
 
 
@@ -156,6 +189,16 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument(
         "--dry-run", action="store_true", help="compute and report counts, then roll back"
+    )
+    parser.add_argument(
+        "--without-review-tags",
+        action="store_true",
+        help="write without staging/review_tags.json (drops review-extracted tags)",
+    )
+    parser.add_argument(
+        "--allow-deleting-referenced",
+        action="store_true",
+        help="delete shoes even if they are on wishlists or have feedback",
     )
     args = parser.parse_args(argv)
 
@@ -173,10 +216,26 @@ def main(argv: list[str] | None = None) -> int:
 
     canonical = load_canonical(args.staging)
     logger.info("loaded %d canonical shoes from %s", len(canonical), args.staging)
+    review_tags = load_cache(args.staging.parent / "review_tags.json")
+    if review_tags is None and not args.without_review_tags:
+        logger.error(
+            "no review_tags.json next to %s — run `python -m pipeline.tags.review_tags` "
+            "first, or pass --without-review-tags to drop those tags",
+            args.staging,
+        )
+        return 1
+    canonical = [apply_review_tags(shoe, review_tags or {}) for shoe in canonical]
 
     engine = create_engine(settings.database_url, pool_pre_ping=True)
     with Session(engine) as session:
-        result = upsert_shoes(session, canonical)
+        try:
+            result = upsert_shoes(
+                session, canonical, allow_deleting_referenced=args.allow_deleting_referenced
+            )
+        except ReferencedShoesError as exc:
+            session.rollback()
+            logger.error("%s — nothing written", exc)
+            return 1
         if args.dry_run:
             session.rollback()
         else:

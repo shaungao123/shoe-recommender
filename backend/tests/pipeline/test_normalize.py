@@ -1,5 +1,7 @@
 """Cleaning + entity-resolution unit tests (no fixtures, no network)."""
 
+import pytest
+
 from pipeline.normalize import (
     map_cut_height,
     map_length_fit,
@@ -63,6 +65,30 @@ def test_enum_mappers():
     assert map_cut_height("High Top") == "high"
     assert map_width_fit("Medium") == "standard"
     assert map_width_fit("Fits narrow feet") == "narrow"
+
+
+@pytest.mark.parametrize(
+    ("note", "expected"),
+    [
+        ("Fits narrow to regular widths best. Wide footers may feel constricted.", "standard"),
+        ("Best for narrow to medium widths. Wide feet may need a half size up.", "standard"),
+        ("Fits regular to slightly narrow initially.", "standard"),
+        ("Fits regular-width feet best.", "standard"),
+        ("Fits medium to wide feet well.", "wide"),
+        ("Fits narrow to regular feet well and accommodates slightly wide feet.", "wide"),
+        ("Wide-foot friendly design.", "wide"),
+        ("Fits average to roomy width best.", "wide"),
+        ("Very narrow fit. Size up if you have wide feet.", "narrow"),
+        ("Extremely narrow last.", "narrow"),
+        ("Wide", "wide"),
+        ("Snug in the midfoot. Best for narrow to regular widths; wide footers may feel it.", "standard"),
+        ("Knit adds forefoot room. Fits wide-footers well.", "wide"),
+        ("Width reports conflict. Some find it narrow while others note a roomy forefoot.", None),
+        ("", None),
+    ],
+)
+def test_map_width_fit_reads_the_verdict_not_the_caveat(note: str, expected: str | None) -> None:
+    assert map_width_fit(note) == expected
     assert map_length_fit("True to size") == "true_to_size"
     assert map_length_fit("Slightly small") == "slightly_small"
     assert map_length_fit("Runs large") == "runs_large"
