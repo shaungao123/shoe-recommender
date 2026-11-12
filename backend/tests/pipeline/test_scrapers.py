@@ -143,6 +143,8 @@ def test_wt_list_records_category_tags(fake_fetcher):
         ("Nike A’One: A’ja Wilson’s First Shoe With Nike is SOLID", "Nike A’One"),
         ("Nike Kobe 3 Low Protro Performance Review", "Nike Kobe 3 Low Protro"),
         ("Air Jordan 11 ‘Bred’ OG vs 2019 Retro Comparison", ""),
+        ("Nike Kobe 8 System Re-Review", "Nike Kobe 8 System"),
+        ("Under Armour Curry 5 Performance Re-Review", "Under Armour Curry 5"),
     ],
 )
 def test_wt_clean_title_keeps_only_the_shoe_name(headline, name):
@@ -167,3 +169,21 @@ def test_wt_parse_review_prose():
     # disclosure/affiliate boilerplate never reaches the corpus
     assert not any("affiliate" in seg.lower() for seg in record.review_text)
     assert not any("purchased a pair" in seg.lower() for seg in record.review_text)
+
+
+@pytest.mark.parametrize(
+    ("verdict", "year", "score", "reviewer"),
+    [
+        ("Release Date: 2024 Price: $120 8 / 10 Total Score", 2024, 8.0, None),
+        ("Release Date: June 2022 Price: $150 9.5 / 10 Total Score", 2022, 9.5, None),
+        ("Release Date: January 15, 2025 Price: $99 Drew 7.5 / 10 Total Score", 2025, 7.5, "Drew"),
+    ],
+)
+def test_wt_parse_older_verdict_layouts(verdict, year, score, reviewer):
+    scraper = WearTestersScraper.__new__(WearTestersScraper)
+    scraper._listing_tags = {}
+    html = f"<h1>Nike KD 15 Performance Review</h1><div class='entry-content'><p>{verdict} Buy Nike KD 15</p></div>"
+    record = scraper.parse(html, "http://x", FETCHED_AT)
+    assert record.release_year == year
+    assert record.scores["reviewer_score"] == score
+    assert record.extras.get("reviewer") == reviewer

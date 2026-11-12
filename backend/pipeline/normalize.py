@@ -78,13 +78,48 @@ def map_cut_height(text: str) -> str | None:
     return None
 
 
+_REGULAR = r"(?:regular|normal|average|medium|standard)"
+# "regular to wide", "accommodates wide feet", "wide-foot friendly", "roomy".
+_WIDE_FRIENDLY = re.compile(
+    r"(?:narrow|" + _REGULAR + r")[- ]to[- ](?:slightly )?(?:wide|roomy)"
+    r"|accommodat\w*[^.]*\bwid|wide[- ]?foot\w*[- ]friendly|wide feet friendly"
+    r"|\broom(?:y|ier)\b|\bwider feet\b|\bwide and " + _REGULAR
+)
+# "narrow to regular widths" describes a standard fit, not a narrow one.
+_NARROW_TO_REGULAR = re.compile(
+    r"narrow[- ]to[- ]" + _REGULAR + r"|" + _REGULAR + r"[- ]to[- ](?:slightly )?narrow"
+)
+
+
+_MIXED_REPORTS = re.compile(r"\b(?:conflict\w*|mixed|vary|varies)\b")
+
+
 def map_width_fit(text: str) -> str | None:
-    s = text.lower()
+    """Width verdict from a label or a review note.
+
+    The first sentence with a verdict wins: notes like "Fits narrow to regular
+    widths best. Wide footers may feel constricted" put the verdict first and
+    caveats after, so matching words anywhere misreads them. Notes that say
+    reports conflict get no verdict.
+    """
+    for sentence in re.split(r"(?<=[.!?])\s", text.strip().lower()):
+        if _MIXED_REPORTS.search(sentence):
+            return None
+        if verdict := _sentence_width(sentence):
+            return verdict
+    return None
+
+
+def _sentence_width(s: str) -> str | None:
+    if _WIDE_FRIENDLY.search(s):
+        return "wide"
+    if _NARROW_TO_REGULAR.search(s):
+        return "standard"
     if "narrow" in s:
         return "narrow"
     if "wide" in s:
         return "wide"
-    if "standard" in s or "medium" in s or "normal" in s or "true" in s:
+    if re.search(_REGULAR + r"|\btrue\b", s):
         return "standard"
     return None
 

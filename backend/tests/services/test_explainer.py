@@ -194,3 +194,11 @@ def test_build_user_prompt_includes_evidence() -> None:
     assert "Aesthetic: (not provided)" in text
     assert "[weartesters] Sticky traction" in text
     assert "Shoe 0" in text
+
+
+def test_build_user_prompt_says_why_each_shoe_ranked() -> None:
+    ranked, unranked = _candidates(2)
+    ranked = ranked.model_copy(update={"match_reasons": ["9.2 traction", "Wide fit"]})
+    text = explainer_llm._build_user_prompt([ranked, unranked], playstyle="slasher", aesthetic="")
+    assert text.count("Why it ranked:") == 1
+    assert "Why it ranked: 9.2 traction; Wide fit" in text

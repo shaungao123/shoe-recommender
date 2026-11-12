@@ -28,6 +28,7 @@ TAG_OVERLAP_WEIGHT = 0.1
 UNKNOWN_VALUE = 0.4  # just under a typical rating, so known data wins ties
 RATING_FLOOR = 5.0  # reviewers rarely score below this on their 0-10 scale
 STRONG_RATING = 8.0
+STRONG_OUTDOOR = 70  # percent or /100; a coin-flip durability score isn't a selling point
 MAX_REASONS = 3
 LIGHT_OZ, HEAVY_OZ = 12.0, 16.0
 LIGHT_ENOUGH_OZ = 14.0
@@ -61,10 +62,10 @@ def _outdoor_value(candidate: Candidate) -> tuple[float, str | None]:
     except ValueError:
         percent = None
     if percent is not None:
-        return percent / 100, f"{percent}% outdoor durability" if percent >= 50 else None
+        return percent / 100, f"{percent}% outdoor durability" if percent >= STRONG_OUTDOOR else None
     lab_score = _number((candidate.metrics.get("runrepeat") or {}).get("score_outdoor"))
     if lab_score is not None:
-        return lab_score / 100, f"{lab_score:.0f}/100 outdoor score" if lab_score >= 50 else None
+        return lab_score / 100, f"{lab_score:.0f}/100 outdoor score" if lab_score >= STRONG_OUTDOOR else None
     suitability = (candidate.specs or {}).get("outdoor_suitability")
     # Scraped spec with mixed provenance: it can rank a shoe, but isn't quoted as a reason.
     return _OUTDOOR_SUITABILITY.get(suitability, UNKNOWN_VALUE), None

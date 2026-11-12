@@ -56,7 +56,7 @@ def _clean_title(title: str) -> str:
     name = re.split(r"\s+/\s+", name)[0]  # two shoes in one review: keep the first
     # colorway nickname in curly quotes; a lone ’ is an apostrophe ("Legacy ’68", "A’One")
     name = re.sub(r"\s*[‘“\"].*$", "", name)
-    name = re.sub(r"\s+(?:performance\s+)?(?:review\b.*|re-)$", "", name, flags=re.I)
+    name = re.sub(r"\s+(?:performance\s+)?(?:re-?)?(?:review\b.*|re-)$", "", name, flags=re.I)
     name = re.sub(
         r"\s+(?:first\s+impressions?|detailed\s+look(?:\s+and(?:\s+review)?)?)$",
         "",
@@ -121,21 +121,24 @@ class WearTestersScraper(BaseScraper):
 
         text = re.sub(r"\s+", " ", content.get_text(" ", strip=True))
 
-        if m := re.search(r"Release Date:\s*(\d{1,2})/(\d{1,2})/(\d{4})", text):
-            record.release_year = int(m.group(3))
+        # "Release Date: 6/15/2023", "June 2022", or just "2024"
+        if m := re.search(r"Release Date:\s*(?:\d{1,2}/\d{1,2}/|[A-Z][a-z]+\.?\s+(?:\d{1,2},?\s+)?)?(\d{4})\b", text):
+            record.release_year = int(m.group(1))
         if m := re.search(r"Price:\s*\$\s*([\d.]+)", text):
             record.msrp_usd_cents = parse_usd_cents(m.group(1))
         if m := re.search(r"Sizing:\s*([^.$]{3,40}?)(?:\s+Buy|\s+Pros|\s*$)", text):
             record.length_fit = map_length_fit(m.group(1))
             record.extras["sizing_note"] = m.group(1).strip()
 
-        # reviewer verdict: "<name> 7 / 10 Total Score"
-        if m := re.search(
-            r"([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+){0,2})\s+(\d+(?:\.\d+)?)\s*/\s*10\s+Total Score",
-            text,
-        ):
-            record.scores["reviewer_score"] = float(m.group(2))
-            record.extras["reviewer"] = m.group(1).strip()
+        # reviewer verdict: "[<name>] 7 / 10 Total Score"; older reviews put the
+        # price right before the score instead of the reviewer's name
+        if m := re.search(r"(\S+(?:\s+\S+){0,2})\s+(\d+(?:\.\d+)?)\s*/\s*10\s+Total Score", text):
+            score = float(m.group(2))
+            if 0 <= score <= 10:
+                record.scores["reviewer_score"] = score
+            name = re.search(r"([A-Z][\w'-]+(?:\s+[A-Z][\w'-]+){0,2})$", m.group(1))
+            if name:
+                record.extras["reviewer"] = name.group(1).strip()
 
         # Pros / Cons columns (h4 + ul)
         for which, target in (("pros", record.pros), ("cons", record.cons)):
