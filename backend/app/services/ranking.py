@@ -11,14 +11,17 @@ from __future__ import annotations
 from app.db.repositories.shoes import SCORE_SOURCE
 from app.schemas.candidate import Candidate
 from app.schemas.recommend import RecommendRequest
+from shared.tags import extract_tags
 
-# Similarity usually spans ~0.1-0.2 across a candidate pool, so these are sized
-# to reorder close matches without letting one answer override a poor fit.
-COURT_WEIGHT = 0.12
-PRIORITY_WEIGHT = 0.12
-WIDTH_WEIGHT = 0.08
-BRAND_WEIGHT = 0.08
-CUT_WEIGHT = 0.06
+# Similarity spans only ~0.05-0.11 across a real candidate pool, so anything
+# larger than these turns a preference into a filter. Tuned with backend/eval.
+COURT_WEIGHT = 0.06
+PRIORITY_WEIGHT = 0.06
+WIDTH_WEIGHT = 0.03
+BRAND_WEIGHT = 0.03
+CUT_WEIGHT = 0.02
+POSITION_WEIGHT = 0.03
+PLAYSTYLE_WEIGHT = 0.015
 UNPRICED_PENALTY = 0.03
 TAG_OVERLAP_WEIGHT = 0.1
 
@@ -35,6 +38,7 @@ _FOOT_WIDTH_FIT = {
     "narrow": {"narrow": 1.0, "standard": 0.6, "wide": 0.2},
 }
 _PRIORITY_LABELS = {"traction": "traction", "cushion": "cushion", "support": "support"}
+_POSITIONS = {"guard", "wing", "big"}
 
 
 def _clamp(value: float) -> float:
@@ -79,6 +83,20 @@ def _priority_value(candidate: Candidate, priority: str) -> tuple[float, str | N
     return _clamp((rating - RATING_FLOOR) / (10 - RATING_FLOOR)), reason
 
 
+def _player_type_boost(candidate: Candidate, request: RecommendRequest) -> float:
+    """Rewards tags matching the shopper's own words. Untagged shoes are unaffected."""
+    wanted = extract_tags(request.playstyle or "")
+    specs = candidate.specs or {}
+    boost = 0.0
+    wanted_positions = wanted & _POSITIONS
+    shoe_positions = set(specs.get("position_tags") or [])
+    if wanted_positions and shoe_positions:
+        boost += POSITION_WEIGHT if wanted_positions & shoe_positions else -POSITION_WEIGHT
+    if (wanted - _POSITIONS) & set(specs.get("playstyle_tags") or []):
+        boost += PLAYSTYLE_WEIGHT
+    return boost
+
+
 def _total(candidate: Candidate, request: RecommendRequest | None) -> tuple[float, list[str]]:
     if candidate.similarity is not None:
         total = candidate.similarity
@@ -88,6 +106,7 @@ def _total(candidate: Candidate, request: RecommendRequest | None) -> tuple[floa
         total -= UNPRICED_PENALTY
     if request is None:
         return total, []
+    total += _player_type_boost(candidate, request)
 
     reasons: list[str] = []
     for priority in request.priorities:

@@ -58,13 +58,13 @@ def test_priority_reorders_close_matches_and_gives_a_reason() -> None:
     assert picked[1].match_reasons == []
 
 
-def test_a_preference_does_not_override_a_much_better_fit() -> None:
-    candidates = [
-        _candidate(1, similarity=0.80),
-        _candidate(2, similarity=0.40, brand="Adidas"),
-    ]
-    picked = select_top_candidates(candidates, n=1, request=RecommendRequest(preferred_brand="adidas"))
-    assert _ids(picked) == [1]
+def test_a_brand_preference_breaks_close_calls_but_is_not_a_filter() -> None:
+    # Gaps are realistic: similarity spans under ~0.1 across a real candidate pool.
+    request = RecommendRequest(preferred_brand="adidas")
+    clearly_better = [_candidate(1, similarity=0.60), _candidate(2, similarity=0.54, brand="Adidas")]
+    close_call = [_candidate(1, similarity=0.56), _candidate(2, similarity=0.54, brand="Adidas")]
+    assert _ids(select_top_candidates(clearly_better, n=1, request=request)) == [1]
+    assert _ids(select_top_candidates(close_call, n=1, request=request)) == [2]
 
 
 def test_outdoor_court_prefers_durable_shoes_over_unknown_and_quotes_only_measured_data() -> None:
@@ -90,6 +90,24 @@ def test_lightweight_uses_shoe_weight() -> None:
     picked = select_top_candidates(candidates, n=2, request=RecommendRequest(priorities=["lightweight"]))
     assert _ids(picked) == [2, 1]
     assert picked[0].match_reasons == ["12.4 oz"]
+
+
+def test_position_tags_reward_matches_and_penalize_mismatches_but_ignore_untagged() -> None:
+    candidates = [
+        _candidate(1, specs={"position_tags": ["guard"]}),
+        _candidate(2),
+        _candidate(3, specs={"position_tags": ["big"]}),
+    ]
+    picked = select_top_candidates(candidates, n=3, request=RecommendRequest(playstyle="Big, Post"))
+    assert _ids(picked) == [3, 2, 1]
+
+
+def test_playstyle_tag_breaks_ties_and_unstated_styles_do_nothing() -> None:
+    candidates = [_candidate(1), _candidate(2, specs={"playstyle_tags": ["shooter"]})]
+    shooter = RecommendRequest(playstyle="Guard, Shooter")
+    slasher = RecommendRequest(playstyle="Guard, Slasher")
+    assert _ids(select_top_candidates(candidates, n=2, request=shooter)) == [2, 1]
+    assert _ids(select_top_candidates(candidates, n=2, request=slasher)) == [1, 2]
 
 
 def test_unpriced_shoes_lose_ties_to_priced_ones() -> None:
