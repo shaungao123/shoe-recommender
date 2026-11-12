@@ -233,6 +233,23 @@ def search_candidates(
     ]
 
 
+def best_similarity_by_shoe(
+    session: Session, query_vector: list[float], model_id: str
+) -> dict[int, float]:
+    """Every shoe's best-chunk similarity to the query, across the whole catalog.
+
+    Same measure ``search_candidates`` ranks by (1 - cosine distance of the
+    closest chunk), without filters or a limit.
+    """
+    distance = func.min(Embedding.vector.cosine_distance(query_vector))
+    rows = session.execute(
+        select(Embedding.shoe_id, distance)
+        .where(Embedding.model_id == model_id)
+        .group_by(Embedding.shoe_id)
+    )
+    return {shoe_id: max(0.0, 1.0 - best) for shoe_id, best in rows}
+
+
 def list_filtered_shoes(
     session: Session,
     *,

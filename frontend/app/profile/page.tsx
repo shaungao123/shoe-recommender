@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { FormEvent, useEffect, useState } from "react";
 
 import { CatalogCard } from "@/components/catalog/CatalogCard";
+import { PreferencesForm } from "@/components/PreferencesForm";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 import { getMe, getWishlist, updateMe, type UserProfile, type WishlistItem } from "@/lib/wishlist";
@@ -133,6 +134,8 @@ export default function ProfilePage() {
         {saveState === "saved" && <p className="mt-2 text-sm font-semibold text-muted">Display name saved.</p>}
         {saveState === "error" && <p className="mt-2 text-sm font-semibold text-ink">Couldn’t save that name. Try again.</p>}
       </div>
+
+      <PreferencesForm />
 
       <div className="mt-10 mb-4 flex items-end justify-between gap-4">
         <h2 className="text-[22px]/tight font-extrabold tracking-[-.01em]">Saved shoes</h2>

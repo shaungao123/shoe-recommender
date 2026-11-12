@@ -21,6 +21,7 @@ import { NoResultsScreen } from "@/components/screens/NoResultsScreen";
 import { ResultsScreen } from "@/components/screens/ResultsScreen";
 import { getRecommendations, sendFeedback, trackEvent } from "@/lib/api";
 import { MOCK_LATENCY_MS } from "@/lib/mockData";
+import { rememberQuizAnswers } from "@/lib/preferences";
 import { getAnonymousSessionId } from "@/lib/session";
 import type {
   FeedbackReason,
@@ -122,6 +123,7 @@ export function RecommenderFlow() {
           intake.footWidth || intake.brand || intake.cut || intake.note.trim(),
         ),
       });
+      if (!simulateFailure) void rememberQuizAnswers(intake);
       setScreen("loading");
       setStage(0);
       clearTimers();

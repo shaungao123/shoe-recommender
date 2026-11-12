@@ -31,7 +31,14 @@ async function accessToken(): Promise<string> {
   return data.session.access_token;
 }
 
-async function authRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+/** A failed API call; ``status`` lets callers treat 404 as "nothing saved". */
+export class ApiError extends Error {
+  constructor(readonly status: number) {
+    super(`Request failed (${status})`);
+  }
+}
+
+export async function authRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = await accessToken();
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${token}`);
@@ -40,7 +47,7 @@ async function authRequest<T>(path: string, init: RequestInit = {}): Promise<T> 
   }
   const response = await fetch(`${API_URL}${path}`, { ...init, headers });
   if (!response.ok) {
-    throw new Error(`Request failed (${response.status})`);
+    throw new ApiError(response.status);
   }
   if (response.status === 204) {
     return undefined as T;

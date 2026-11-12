@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 
+import { carryOverQuizAnswers } from "@/lib/preferences";
 import { createClient } from "@/lib/supabase/client";
 import { isSupabaseConfigured } from "@/lib/supabase/config";
 
@@ -23,10 +24,13 @@ export function AccountNav() {
     void supabase.auth.getSession().then(({ data }) => {
       if (!active) return;
       setState(data.session ? "signed-in" : "signed-out");
+      if (data.session) void carryOverQuizAnswers();
     });
 
-    const { data: subscription } = supabase.auth.onAuthStateChange((_event, session) => {
+    const { data: subscription } = supabase.auth.onAuthStateChange((event, session) => {
       setState(session ? "signed-in" : "signed-out");
+      // A quiz taken while logged out becomes this account's preferences.
+      if (event === "SIGNED_IN") void carryOverQuizAnswers();
     });
 
     return () => {

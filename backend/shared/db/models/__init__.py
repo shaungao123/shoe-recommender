@@ -5,6 +5,7 @@ from shared.db.models.feedback import Feedback
 from shared.db.models.product_event import ProductEvent
 from shared.db.models.shoe import Shoe
 from shared.db.models.user import User
+from shared.db.models.user_preferences import UserPreferences
 from shared.db.models.wishlist import WishlistItem
 
 __all__ = [
@@ -13,5 +14,6 @@ __all__ = [
     "ProductEvent",
     "Shoe",
     "User",
+    "UserPreferences",
     "WishlistItem",
 ]

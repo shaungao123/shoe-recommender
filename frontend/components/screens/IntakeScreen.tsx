@@ -4,9 +4,9 @@ import { Chip } from "@/components/Chip";
 import { isMockApi } from "@/lib/api";
 import type { Court, Cut, FootWidth, Priority } from "@/lib/types";
 
-const NOT_SURE = "Not sure";
-const POSITIONS = ["Guard", "Wing", "Big"] as const;
-const STYLE_TAGS = [
+export const NOT_SURE = "Not sure";
+export const POSITIONS = ["Guard", "Wing", "Big"] as const;
+export const STYLE_TAGS = [
   "Slasher",
   "Shooter",
   "All-around",
@@ -14,25 +14,25 @@ const STYLE_TAGS = [
   "Defender",
   "Speedster",
 ] as const;
-const COURTS: [Court, string][] = [
+export const COURTS: [Court, string][] = [
   ["indoor", "Indoor"],
   ["outdoor", "Outdoor"],
   ["both", "Both"],
 ];
-const PRIORITIES: [Priority, string][] = [
+export const PRIORITIES: [Priority, string][] = [
   ["traction", "Traction"],
   ["cushion", "Cushion"],
   ["support", "Ankle support"],
   ["lightweight", "Light weight"],
 ];
-const NO_LIMIT = "No limit";
-const BUDGETS = ["$100", "$120", "$140", "$160", "$180", NO_LIMIT] as const;
-const FOOT_WIDTHS: [FootWidth, string][] = [
+export const NO_LIMIT = "No limit";
+export const BUDGETS = ["$100", "$120", "$140", "$160", "$180", NO_LIMIT] as const;
+export const FOOT_WIDTHS: [FootWidth, string][] = [
   ["narrow", "Narrow"],
   ["standard", "Standard"],
   ["wide", "Wide"],
 ];
-const BRANDS = [
+export const BRANDS = [
   "Nike",
   "Jordan",
   "Adidas",
@@ -48,7 +48,7 @@ const BRANDS = [
   "Peak",
   "Xtep",
 ] as const;
-const CUTS: [Cut, string][] = [
+export const CUTS: [Cut, string][] = [
   ["low", "Low"],
   ["mid", "Mid"],
   ["high", "High"],

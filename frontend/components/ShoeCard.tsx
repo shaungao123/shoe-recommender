@@ -5,6 +5,7 @@ import { useState } from "react";
 
 import { SaveShoeButton } from "@/components/SaveShoeButton";
 import { isMockApi } from "@/lib/api";
+import { shopLink } from "@/lib/shop";
 import type { FeedbackReason, FeedbackVote, RecommendedShoe } from "@/lib/types";
 
 interface ShoeCardProps {
@@ -31,6 +32,7 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
   const [showFeedbackForm, setShowFeedbackForm] = useState(false);
   const [reason, setReason] = useState<FeedbackReason | null>(null);
   const [comment, setComment] = useState("");
+  const shop = shopLink(shoe.brand, shoe.model, shoe.affiliate_url);
 
   const submitDownvote = () => {
     if (!reason) return;
@@ -148,25 +150,15 @@ export function ShoeCard({ shoe, isTop, vote, onVote, onBuyIntent }: ShoeCardPro
         <SaveShoeButton shoeId={shoe.id} className="mb-3.5 w-full" />
 
         <div className="mb-3.5">
-          {shoe.affiliate_url ? (
-            <a
-              href={shoe.affiliate_url}
-              target="_blank"
-              rel="sponsored noopener"
-              onClick={onBuyIntent}
-              className="block rounded-full bg-accent p-[13px] text-center text-[13px]/none font-bold text-white transition-colors hover:bg-accent-deep"
-            >
-              Shop this shoe
-            </a>
-          ) : (
-            <button
-              type="button"
-              onClick={onBuyIntent}
-              className="w-full cursor-pointer rounded-full border-[1.5px] border-dashed border-line p-[13px] text-center text-[13px]/none font-bold text-faint transition-colors hover:border-ink hover:text-ink"
-            >
-              Buy links coming soon
-            </button>
-          )}
+          <a
+            href={shop.href}
+            target="_blank"
+            rel={shop.rel}
+            onClick={onBuyIntent}
+            className="block rounded-full bg-accent p-[13px] text-center text-[13px]/none font-bold text-white transition-colors hover:bg-accent-deep"
+          >
+            {shop.label}
+          </a>
         </div>
 
         <div className="flex items-center justify-between">

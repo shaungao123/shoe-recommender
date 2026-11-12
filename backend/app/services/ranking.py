@@ -98,12 +98,18 @@ def _player_type_boost(candidate: Candidate, request: RecommendRequest) -> float
     return boost
 
 
-def _total(candidate: Candidate, request: RecommendRequest | None) -> tuple[float, list[str]]:
+def _total(
+    candidate: Candidate, request: RecommendRequest | None, *, ignore_price: bool = False
+) -> tuple[float, list[str]]:
+    """Retrieval fit plus quiz boosts, and the reasons worth showing.
+
+    ``ignore_price`` drops the unpriced penalty, for judging fit alone.
+    """
     if candidate.similarity is not None:
         total = candidate.similarity
     else:
         total = (candidate.tag_overlap or 0) * TAG_OVERLAP_WEIGHT
-    if candidate.price is None:
+    if candidate.price is None and not ignore_price:
         total -= UNPRICED_PENALTY
     if request is None:
         return total, []
@@ -141,6 +147,11 @@ def _total(candidate: Candidate, request: RecommendRequest | None) -> tuple[floa
     return total, reasons[:MAX_REASONS]
 
 
+def rank_key(candidate: Candidate, total: float) -> tuple[float, float, int]:
+    """Best first: higher total, then higher review score, then lower shoe id."""
+    return (-round(total, 4), -(_rating(candidate, "overall") or 0), candidate.shoe_id)
+
+
 def select_top_candidates(
     candidates: list[Candidate], n: int, request: RecommendRequest | None = None
 ) -> list[Candidate]:
@@ -148,9 +159,7 @@ def select_top_candidates(
     if n <= 0:
         return []
     scored = [(candidate, *_total(candidate, request)) for candidate in candidates]
-    scored.sort(
-        key=lambda item: (-round(item[1], 4), -(_rating(item[0], "overall") or 0), item[0].shoe_id)
-    )
+    scored.sort(key=lambda item: rank_key(item[0], item[1]))
     return [
         candidate.model_copy(update={"match_reasons": reasons})
         for candidate, _, reasons in scored[:n]

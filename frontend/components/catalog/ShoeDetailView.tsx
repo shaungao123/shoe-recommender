@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useEffect, useState } from "react";
 
 import { ScoreBar } from "@/components/catalog/ScoreBar";
+import { VerdictBox } from "@/components/catalog/VerdictBox";
 import { SaveShoeButton } from "@/components/SaveShoeButton";
 import {
   catalogReturnPath,
@@ -17,6 +18,7 @@ import {
 } from "@/lib/catalog";
 import { trackEvent } from "@/lib/api";
 import { getAnonymousSessionId } from "@/lib/session";
+import { shopLink } from "@/lib/shop";
 
 const MAX_PROS_CONS = 5;
 const OUTBOUND_REL = "noopener noreferrer";
@@ -197,22 +199,24 @@ export function ShoeDetailView({ id }: { id: number }) {
           <div className="mt-6 flex flex-wrap gap-2">
             {chips.map((item) => <span key={item} className="rounded-full bg-white px-3 py-1.5 text-xs font-bold text-muted">{item}</span>)}
           </div>
+          <VerdictBox shoeId={shoe.id} />
           <div className="mt-6">
             <SaveShoeButton shoeId={shoe.id} />
           </div>
-          {shoe.affiliate_url ? (
-            <a
-              href={shoe.affiliate_url}
-              target="_blank"
-              rel="sponsored noopener"
-              onClick={() => trackEvent({ session_id: getAnonymousSessionId(), name: "buy_link_intent", properties: { shoe_id: id } })}
-              className="mt-4 block rounded-full bg-accent p-4 text-center text-sm font-bold text-white transition-colors hover:bg-accent-deep"
-            >
-              Shop this shoe
-            </a>
-          ) : (
-            <div className="mt-4 rounded-2xl border border-dashed border-line bg-white p-4 text-center text-sm font-bold text-faint">Buy links coming soon</div>
-          )}
+          {(() => {
+            const shop = shopLink(shoe.brand, shoe.name, shoe.affiliate_url);
+            return (
+              <a
+                href={shop.href}
+                target="_blank"
+                rel={shop.rel}
+                onClick={() => trackEvent({ session_id: getAnonymousSessionId(), name: "buy_link_intent", properties: { shoe_id: id, has_affiliate_link: shop.isAffiliate } })}
+                className="mt-4 block rounded-full bg-accent p-4 text-center text-sm font-bold text-white transition-colors hover:bg-accent-deep"
+              >
+                {shop.label}
+              </a>
+            );
+          })()}
         </div>
       </div>
 
