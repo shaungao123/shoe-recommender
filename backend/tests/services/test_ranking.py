@@ -92,6 +92,24 @@ def test_lightweight_uses_shoe_weight() -> None:
     assert picked[0].match_reasons == ["12.4 oz"]
 
 
+def test_position_tags_reward_matches_and_penalize_mismatches_but_ignore_untagged() -> None:
+    candidates = [
+        _candidate(1, specs={"position_tags": ["guard"]}),
+        _candidate(2),
+        _candidate(3, specs={"position_tags": ["big"]}),
+    ]
+    picked = select_top_candidates(candidates, n=3, request=RecommendRequest(playstyle="Big, Post"))
+    assert _ids(picked) == [3, 2, 1]
+
+
+def test_playstyle_tag_breaks_ties_and_unstated_styles_do_nothing() -> None:
+    candidates = [_candidate(1), _candidate(2, specs={"playstyle_tags": ["shooter"]})]
+    shooter = RecommendRequest(playstyle="Guard, Shooter")
+    slasher = RecommendRequest(playstyle="Guard, Slasher")
+    assert _ids(select_top_candidates(candidates, n=2, request=shooter)) == [2, 1]
+    assert _ids(select_top_candidates(candidates, n=2, request=slasher)) == [1, 2]
+
+
 def test_unpriced_shoes_lose_ties_to_priced_ones() -> None:
     candidates = [_candidate(1, price=None), _candidate(2)]
     assert _ids(select_top_candidates(candidates, n=1)) == [2]
