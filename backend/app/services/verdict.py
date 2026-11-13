@@ -158,6 +158,8 @@ def fit_notes(candidate: Candidate, preferences: Preferences) -> tuple[list[str]
             reasons.append(f"Built for {_PLURAL[matched[0]]}")
         elif built_for := " and ".join(_PLURAL[p] for p in ("guard", "wing", "big") if p in shoe_positions):
             caveats.append(f"Built more for {built_for}")
+    if "leaper" in preferences.styles and "bouncy" in (specs.get("trait_tags") or []):
+        reasons.append("Bouncy cushioning, per reviewers")
     styles = [s for s in preferences.styles if s in set(specs.get("playstyle_tags") or [])]
     if styles and styles[0] in _STYLE_NOUN:
         reasons.append(f"Suits {_STYLE_NOUN[styles[0]]}")

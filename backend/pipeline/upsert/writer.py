@@ -5,9 +5,11 @@
     python -m pipeline.upsert.writer --staging PATH  # alternate corpus file
 
 Review tags from ``pipeline.tags.review_tags`` (``staging/review_tags.json``)
-are merged into the scraped tags before writing. The writer refuses to run
-without that file unless ``--without-review-tags`` is passed, because writing
-the scrape alone would silently drop them.
+are merged into the scraped tags before writing, and review traits from
+``pipeline.tags.review_traits`` (``staging/review_traits.json``) become
+``specs.trait_tags``. The writer refuses to run without either file unless
+``--without-review-tags`` / ``--without-review-traits`` is passed, because
+writing the scrape alone would silently drop them.
 
 Shoes that are on a wishlist or have feedback are never deleted silently: the
 writer stops and names them unless ``--allow-deleting-referenced`` is passed.
@@ -37,6 +39,7 @@ from typing import Any
 from sqlalchemy import create_engine, delete, or_, select
 from sqlalchemy.orm import Session
 
+from pipeline.tags import review_traits
 from pipeline.tags.review_tags import apply_review_tags, load_cache
 from shared.config import settings
 from shared.db.models import Feedback, Shoe, WishlistItem
@@ -63,6 +66,7 @@ SPEC_FIELDS = (
     "outdoor_suitability",
     "position_tags",
     "playstyle_tags",
+    "trait_tags",  # from pipeline.tags.review_traits, e.g. "bouncy"
 )
 
 # Everything provenance/review-shaped goes to `extra_metadata`. `metrics`
@@ -76,6 +80,7 @@ METADATA_FIELDS = (
     "provenance",
     "sources",
     "review_tags",  # quote behind each review-extracted tag, for citations
+    "review_traits",  # quote behind each review-extracted trait
 )
 
 
@@ -196,6 +201,11 @@ def main(argv: list[str] | None = None) -> int:
         help="write without staging/review_tags.json (drops review-extracted tags)",
     )
     parser.add_argument(
+        "--without-review-traits",
+        action="store_true",
+        help="write without staging/review_traits.json (drops trait tags like bouncy)",
+    )
+    parser.add_argument(
         "--allow-deleting-referenced",
         action="store_true",
         help="delete shoes even if they are on wishlists or have feedback",
@@ -225,6 +235,15 @@ def main(argv: list[str] | None = None) -> int:
         )
         return 1
     canonical = [apply_review_tags(shoe, review_tags or {}) for shoe in canonical]
+    traits = review_traits.load_cache(args.staging.parent / "review_traits.json")
+    if traits is None and not args.without_review_traits:
+        logger.error(
+            "no review_traits.json next to %s — run `python -m pipeline.tags.review_traits` "
+            "first, or pass --without-review-traits to drop those traits",
+            args.staging,
+        )
+        return 1
+    canonical = [review_traits.apply_review_traits(shoe, traits or {}) for shoe in canonical]
 
     engine = create_engine(settings.database_url, pool_pre_ping=True)
     with Session(engine) as session:

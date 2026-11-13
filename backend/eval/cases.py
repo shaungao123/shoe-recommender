@@ -38,6 +38,12 @@ GRIPPY = (
     r"Kyrie|Kobe|Curry (?:[4-9]\b|1\d)|Sabrina|G\.?T\.? Cut|Book [12]|Nike Ja [1-4]|All.Pro Nitro"
 )
 LIGHT = r"Adizero Select|Ultra Light|Kobe AD|Sabrina|Curry|Nike Ja|Speed \d|Air Go LWP"
+# Leapers: bouncy, springy cushioning (Zoom Strobel, ZoomX, Boom, Jet Boost, Nitro).
+LEAPER = (
+    r"G\.?T\.? Jump|Way of Wade (?:9|1\d)|Wade 808|Anthony Edwards|A\.?E\.? ?[12]\b"
+    r"|Harden Vol(?:ume)?\.? ?(?:[7-9]|10)\b|All.Pro Nitro|KT (?:9|10)\b|Zion [1-4]\b"
+    r"|LeBron (?:19|2[0-3])\b|KD 1[5-8]\b"
+)
 HEAVY = FLAGSHIP_LEBRON + r"|Zion|Adapt BB|Shox"
 BUDGET_PERFORMER = (
     r"Precision|Giannis Immortality|Kyrie Flytrap|Renew Elevate|Witness|Dame Certified"
@@ -80,5 +86,9 @@ CASES = [
     Case("big-budget", {"playstyle": "Big, Post", "budget": 120, "court": "both", "priorities": ["support"]}, (BIG_SUPPORT, BUDGET_PERFORMER), (LOW_MINIMAL,)),
     Case("big-defender-outdoor", {"playstyle": "Big, Defender", "budget": 180, "court": "outdoor", "priorities": ["cushion"]}, (OUTDOOR_TOUGH, BIG_SUPPORT), (OUTDOOR_FRAGILE, LOW_MINIMAL)),
     Case("not-sure-indoor", {"playstyle": "", "budget": 140, "court": "indoor"}, (QUICK_GUARD, WING_VERSATILE), ()),
+    Case("guard-leaper-indoor", {"playstyle": "Guard, Leaper", "budget": 180, "court": "indoor"}, (LEAPER,), (LOW_MINIMAL, THIN_CUSHION)),
+    Case("wing-leaper-cushion", {"playstyle": "Wing, Leaper", "budget": 180, "court": "indoor", "priorities": ["cushion"]}, (LEAPER,), (LOW_MINIMAL, THIN_CUSHION)),
+    Case("big-leaper-support", {"playstyle": "Big, Leaper", "court": "indoor", "priorities": ["support"]}, (LEAPER, BIG_SUPPORT), (LOW_MINIMAL,)),
+    Case("guard-leaper-budget", {"playstyle": "Guard, Leaper", "budget": 120, "court": "both"}, (LEAPER,), (LOW_MINIMAL, THIN_CUSHION)),
     Case("free-text-ankle-injury", {"playstyle": "Wing. Recovering from an ankle sprain, need stability", "budget": 180, "court": "indoor", "priorities": ["support"]}, (BIG_SUPPORT, WING_VERSATILE), (LOW_MINIMAL,)),
 ]

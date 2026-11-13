@@ -22,6 +22,7 @@ BRAND_WEIGHT = 0.03
 CUT_WEIGHT = 0.02
 POSITION_WEIGHT = 0.03
 PLAYSTYLE_WEIGHT = 0.015
+BOUNCE_WEIGHT = 0.03  # leapers: reviewers call the cushioning standout bouncy
 UNPRICED_PENALTY = 0.03
 TAG_OVERLAP_WEIGHT = 0.1
 
@@ -84,18 +85,22 @@ def _priority_value(candidate: Candidate, priority: str) -> tuple[float, str | N
     return _clamp((rating - RATING_FLOOR) / (10 - RATING_FLOOR)), reason
 
 
-def _player_type_boost(candidate: Candidate, request: RecommendRequest) -> float:
+def _player_type_boost(candidate: Candidate, request: RecommendRequest) -> tuple[float, str | None]:
     """Rewards tags matching the shopper's own words. Untagged shoes are unaffected."""
     wanted = extract_tags(request.playstyle or "")
     specs = candidate.specs or {}
-    boost = 0.0
+    boost, reason = 0.0, None
     wanted_positions = wanted & _POSITIONS
     shoe_positions = set(specs.get("position_tags") or [])
     if wanted_positions and shoe_positions:
         boost += POSITION_WEIGHT if wanted_positions & shoe_positions else -POSITION_WEIGHT
     if (wanted - _POSITIONS) & set(specs.get("playstyle_tags") or []):
         boost += PLAYSTYLE_WEIGHT
-    return boost
+    # Leaper isn't a tag reviewers give players; it's matched through the shoe's bounce.
+    if "leaper" in wanted and "bouncy" in (specs.get("trait_tags") or []):
+        boost += BOUNCE_WEIGHT
+        reason = "Bouncy cushioning, per reviewers"
+    return boost, reason
 
 
 def _total(
@@ -113,9 +118,10 @@ def _total(
         total -= UNPRICED_PENALTY
     if request is None:
         return total, []
-    total += _player_type_boost(candidate, request)
+    boost, style_reason = _player_type_boost(candidate, request)
+    total += boost
 
-    reasons: list[str] = []
+    reasons: list[str] = [style_reason] if style_reason else []
     for priority in request.priorities:
         value, reason = _priority_value(candidate, priority)
         total += PRIORITY_WEIGHT * value
