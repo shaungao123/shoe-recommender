@@ -121,3 +121,14 @@ def test_more_than_two_priorities_is_rejected() -> None:
 
     with pytest.raises(ValidationError):
         RecommendRequest(priorities=["traction", "cushion", "support"])
+
+
+def test_leapers_get_bouncy_shoes_first_with_a_reason() -> None:
+    flat = _candidate(1, similarity=0.60, specs={"trait_tags": []})
+    bouncy = _candidate(2, similarity=0.59, specs={"trait_tags": ["bouncy"]})
+    leaper = RecommendRequest(playstyle="Guard, Leaper")
+    top = select_top_candidates([flat, bouncy], n=2, request=leaper)
+    assert _ids(top) == [2, 1]
+    assert top[0].match_reasons[0] == "Bouncy cushioning, per reviewers"
+    # Without Leaper the trait does nothing.
+    assert _ids(select_top_candidates([flat, bouncy], n=2, request=RecommendRequest(playstyle="Guard"))) == [1, 2]

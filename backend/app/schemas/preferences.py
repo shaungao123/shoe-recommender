@@ -10,7 +10,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 from app.schemas.recommend import Court, Cut, FootWidth, Priority, RecommendRequest
 
 Position = Literal["guard", "wing", "big"]
-Style = Literal["slasher", "shooter", "all-around", "post", "defender", "speedster"]
+Style = Literal["slasher", "shooter", "all-around", "post", "defender", "speedster", "leaper"]
 
 
 class Preferences(BaseModel):
@@ -19,7 +19,7 @@ class Preferences(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     positions: list[Position] = Field(default_factory=list, max_length=3)
-    styles: list[Style] = Field(default_factory=list, max_length=6)
+    styles: list[Style] = Field(default_factory=list, max_length=7)
     description: str = Field("", max_length=500, description="Their game in their own words")
     court: Court | None = None
     priorities: list[Priority] = Field(default_factory=list, max_length=2)

@@ -13,7 +13,7 @@ import type { Court, Cut, FootWidth, Priority } from "@/lib/types";
 import { ApiError, authRequest } from "@/lib/wishlist";
 
 export type Position = "guard" | "wing" | "big";
-export type Style = "slasher" | "shooter" | "all-around" | "post" | "defender" | "speedster";
+export type Style = "slasher" | "shooter" | "all-around" | "post" | "defender" | "speedster" | "leaper";
 
 export interface Preferences {
   positions: Position[];

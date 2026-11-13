@@ -13,6 +13,7 @@ export const STYLE_TAGS = [
   "Post",
   "Defender",
   "Speedster",
+  "Leaper",
 ] as const;
 export const COURTS: [Court, string][] = [
   ["indoor", "Indoor"],

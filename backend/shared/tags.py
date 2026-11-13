@@ -42,6 +42,11 @@ _PLAYSTYLE_MAP = {
     "speedster": "speedster",
     "quick guard": "speedster",
     "shifty": "speedster",
+    "leaper": "leaper",
+    "explosive leaper": "leaper",
+    "high flyer": "leaper",
+    "high-flyer": "leaper",
+    "dunker": "leaper",
 }
 
 
